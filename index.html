@@ -51,7 +51,7 @@
   input.pt { width:90px; }
   .steps li { margin:6px 0; }
   .formules li { margin:10px 0; overflow-x:auto; }
-  .cacher { display:none; }
+  .cacher { display:none !important; }
 
   .niveaux { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px; }
   .niveaux button { background:#edf2f7; font-weight:bold; }
@@ -89,6 +89,11 @@
   details summary::before { content:"▶"; display:inline-block; font-size:.8em; margin-right:10px; transition:transform .2s; }
   details[open] summary::before { transform:rotate(90deg); }
   details summary:hover { color:#3182ce; }
+
+  /* Mode Associe */
+  #assocChoix { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-top:10px; }
+  #assocChoix button { padding:6px; border:2px solid #cbd5e0; border-radius:10px; background:#fff; }
+  #assocChoix canvas { border:none; }
 </style>
 </head>
 <body>
@@ -116,8 +121,10 @@
     <div class="tabs">
       <button id="tabCalc" class="actif" onclick="mode('calc')">🧮 Calculer</button>
       <button id="tabExo" onclick="mode('exo')">🎯 S'entraîner</button>
+      <button id="tabAssoc" onclick="mode('assoc')">📈 Associe</button>
     </div>
 
+    <!-- MODE ENTRAINEMENT -->
     <div id="zoneExo" class="cacher">
       <div class="niveaux" id="niveaux">
         <button data-n="1" class="actif" onclick="choisirNiveau(1)">🌱 Débutant</button>
@@ -136,10 +143,22 @@
       <div id="exo"></div>
     </div>
 
+    <!-- MODE ASSOCIE -->
+    <div id="zoneAssoc" class="cacher">
+      <div style="font-weight:bold;margin-bottom:6px">Quelle courbe est la dérivée de f ?</div>
+      <div style="font-size:15px;margin:6px 0">
+        <span style="color:#3182ce">■</span> f(x) = <span id="assocF"></span>
+      </div>
+      <canvas id="assocMain" width="760" height="260"></canvas>
+      <div id="assocChoix"></div>
+      <div id="assocMsg" class="feedback"></div>
+      <div class="actions"><button class="passer" onclick="assocNouveau()">Question suivante ➜</button></div>
+    </div>
+
     <div id="libelle" style="margin:10px 0 6px;font-weight:bold">f(x) =</div>
     <div class="ecran" id="ecran"></div>
 
-    <div class="pave">
+    <div class="pave" id="pave">
       <button class="var" onclick="ins('x')">x</button>
       <button class="fn" onclick="ins('frac')">▫⁄▫</button>
       <button class="fn" onclick="ins('pow')">xⁿ</button>
@@ -199,8 +218,14 @@
 
   <div class="card" id="cardGraph">
     <h3>Graphique</h3>
-    <canvas id="graph" width="760" height="380"></canvas>
-    <div style="font-size:13px;color:#555;margin-top:6px"><span style="color:#3182ce">■</span> f(x) &nbsp; <span style="color:#e53e3e">■</span> dérivée</div>
+    <canvas id="graph" width="760" height="380" style="touch-action:none"></canvas>
+    <div style="font-size:13px;color:#555;margin-top:6px">
+      <span style="color:#3182ce">■</span> f(x) &nbsp;
+      <span style="color:#e53e3e">■</span> dérivée &nbsp;
+      <span style="color:#38a169">■</span> tangente
+    </div>
+    <div id="infoTangente" class="result" style="font-size:16px;display:none"></div>
+    <div class="petit" style="margin-top:6px">👆 Touche ou glisse sur le graphique pour déplacer la tangente.</div>
   </div>
 
   <div class="card">
@@ -487,10 +512,16 @@ function mode(m){
   modeCourant=m;
   document.getElementById('tabCalc').classList.toggle('actif',m==='calc');
   document.getElementById('tabExo').classList.toggle('actif',m==='exo');
+  document.getElementById('tabAssoc').classList.toggle('actif',m==='assoc');
   document.getElementById('zoneExo').classList.toggle('cacher',m!=='exo');
+  document.getElementById('zoneAssoc').classList.toggle('cacher',m!=='assoc');
   document.getElementById('actionsJeu').classList.toggle('cacher',m!=='exo');
   document.getElementById('optCalc').classList.toggle('cacher',m!=='calc');
   document.getElementById('cardGraph').classList.toggle('cacher',m!=='calc');
+  // clavier et écran masqués en mode Associe
+  document.getElementById('libelle').classList.toggle('cacher',m==='assoc');
+  document.getElementById('ecran').classList.toggle('cacher',m==='assoc');
+  document.getElementById('pave').classList.toggle('cacher',m==='assoc');
   document.getElementById('sortie').innerHTML='';
   document.getElementById('feedback').innerHTML='';
   arreterChrono();
@@ -499,6 +530,8 @@ function mode(m){
     document.getElementById('libelle').textContent="Ta réponse : f′(x) =";
     document.getElementById('btnGo').textContent='Vérifier';
     demarrerPartie();
+  } else if(m==='assoc'){
+    assocNouveau();
   } else {
     document.getElementById('libelle').textContent='f(x) =';
     document.getElementById('btnGo').textContent='Calculer f′(x)';
@@ -553,21 +586,38 @@ function etapes(f){
   if(!l.length) l.push("Applique directement la formule de dérivation correspondante.");
   return `<h4>💡 Méthode</h4><ul class="steps">${l.map(s=>`<li>${s}</li>`).join('')}</ul>`;
 }
+
+/* ---------- Graphique + tangente interactive ---------- */
+let graphe = null;
+let xTan = null;
+
 function dessiner(node){
-  const c=document.getElementById('graph'), ctx=c.getContext('2d');
+  const c=document.getElementById('graph');
   const W=c.width,H=c.height,xmin=-6,xmax=6;
-  ctx.clearRect(0,0,W,H);
   const f=node.compile(), df=math.derivative(node,'x').compile();
   let ys=[];
   for(let i=0;i<=200;i++){const x=xmin+(xmax-xmin)*i/200;try{const y=f.evaluate({x});if(isFinite(y)&&Math.abs(y)<1e4)ys.push(y);}catch{}}
   let ymax=ys.length?Math.min(Math.max(...ys.map(Math.abs)),20):10; if(ymax<2)ymax=2;
+  graphe={f,df,W,H,xmin,xmax,ymax};
+  const p=parseFloat(document.getElementById('point').value.trim().replace(',','.'));
+  xTan = isFinite(p) ? p : 1;
+  trace();
+}
+
+function trace(){
+  if(!graphe) return;
+  const {f,df,W,H,xmin,xmax,ymax}=graphe;
+  const c=document.getElementById('graph'), ctx=c.getContext('2d');
   const X=x=>(x-xmin)/(xmax-xmin)*W, Y=y=>H/2-(y/ymax)*(H/2);
+  ctx.clearRect(0,0,W,H);
+
   ctx.strokeStyle='#e2e8f0';ctx.lineWidth=1;
   for(let x=Math.ceil(xmin);x<=xmax;x++){ctx.beginPath();ctx.moveTo(X(x),0);ctx.lineTo(X(x),H);ctx.stroke();}
   ctx.strokeStyle='#4a5568';ctx.lineWidth=2;
   ctx.beginPath();ctx.moveTo(0,Y(0));ctx.lineTo(W,Y(0));ctx.stroke();
   ctx.beginPath();ctx.moveTo(X(0),0);ctx.lineTo(X(0),H);ctx.stroke();
-  const trace=(fn,col)=>{
+
+  const courbe=(fn,col)=>{
     ctx.strokeStyle=col;ctx.lineWidth=2.5;ctx.beginPath();let deb=true;
     for(let i=0;i<=800;i++){
       const x=xmin+(xmax-xmin)*i/800; let y; try{y=fn.evaluate({x});}catch{y=NaN;}
@@ -576,8 +626,50 @@ function dessiner(node){
     }
     ctx.stroke();
   };
-  trace(f,'#3182ce'); trace(df,'#e53e3e');
+  courbe(f,'#3182ce'); courbe(df,'#e53e3e');
+
+  const info=document.getElementById('infoTangente');
+  let y0,m;
+  try{ y0=f.evaluate({x:xTan}); m=df.evaluate({x:xTan}); }catch{ y0=NaN; }
+  if(!isFinite(y0)||!isFinite(m)||typeof y0!=='number'){ info.style.display='none'; return; }
+
+  ctx.strokeStyle='#38a169';ctx.lineWidth=2.5;
+  ctx.beginPath();
+  ctx.moveTo(X(xmin),Y(y0+m*(xmin-xTan)));
+  ctx.lineTo(X(xmax),Y(y0+m*(xmax-xTan)));
+  ctx.stroke();
+
+  ctx.fillStyle='#3182ce';ctx.beginPath();ctx.arc(X(xTan),Y(y0),7,0,7);ctx.fill();
+  ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.stroke();
+  ctx.fillStyle='#e53e3e';ctx.beginPath();ctx.arc(X(xTan),Y(m),6,0,7);ctx.fill();
+  ctx.setLineDash([5,5]);ctx.strokeStyle='#a0aec0';ctx.lineWidth=1.5;
+  ctx.beginPath();ctx.moveTo(X(xTan),Y(y0));ctx.lineTo(X(xTan),Y(m));ctx.stroke();
+  ctx.setLineDash([]);
+
+  const r2=v=>math.round(v,3);
+  const b=y0-m*xTan;
+  info.style.display='block';
+  katex.render(
+    `x=${r2(xTan)}\\quad f(x)=${r2(y0)}\\quad \\color{#e53e3e}{f'(x)=${r2(m)}}\\\\[4pt]`+
+    `\\color{#38a169}{y=${r2(m)}\\,x ${b<0?'-':'+'} ${Math.abs(r2(b))}}`,
+    info,{throwOnError:false,displayMode:false});
 }
+
+(function(){
+  const c=document.getElementById('graph');
+  let actif=false;
+  function deplace(e){
+    if(!graphe) return;
+    const rect=c.getBoundingClientRect();
+    const px=(e.clientX-rect.left)/rect.width;
+    xTan=graphe.xmin+Math.max(0,Math.min(1,px))*(graphe.xmax-graphe.xmin);
+    trace();
+  }
+  c.addEventListener('pointerdown',e=>{actif=true;c.setPointerCapture(e.pointerId);deplace(e);});
+  c.addEventListener('pointermove',e=>{if(actif)deplace(e);});
+  c.addEventListener('pointerup',()=>actif=false);
+  c.addEventListener('pointercancel',()=>actif=false);
+})();
 
 /* =====================================================
    MODE JEU : générateur d'exercices
@@ -798,6 +890,103 @@ function passer(){
 }
 
 /* =====================================================
+   MODE ASSOCIE LA COURBE
+   ===================================================== */
+const BANQUE_ASSOC = [
+  'x^2','x^3','x^3-3*x','sin(x)','cos(x)','exp(x)/3','x^2/2-x',
+  'x^4/4-x^2','sin(2*x)/2','x*exp(-x/2)','x^3/3-x','cos(x)+x/2'
+];
+let assocBonne=-1, assocBloque=false, assocSerie=0;
+
+function tracerMini(cv, expr, couleur, ymax){
+  const ctx=cv.getContext('2d'), W=cv.width, H=cv.height, xmin=-4, xmax=4;
+  const X=x=>(x-xmin)/(xmax-xmin)*W, Y=y=>H/2-(y/ymax)*(H/2);
+  ctx.clearRect(0,0,W,H);
+  ctx.strokeStyle='#e2e8f0';ctx.lineWidth=1;
+  for(let x=-4;x<=4;x++){ctx.beginPath();ctx.moveTo(X(x),0);ctx.lineTo(X(x),H);ctx.stroke();}
+  ctx.strokeStyle='#4a5568';ctx.lineWidth=2;
+  ctx.beginPath();ctx.moveTo(0,Y(0));ctx.lineTo(W,Y(0));ctx.stroke();
+  ctx.beginPath();ctx.moveTo(X(0),0);ctx.lineTo(X(0),H);ctx.stroke();
+  const fn=math.compile(expr);
+  ctx.strokeStyle=couleur;ctx.lineWidth=3;ctx.beginPath();let deb=true;
+  for(let i=0;i<=300;i++){
+    const x=xmin+(xmax-xmin)*i/300; let y;
+    try{y=fn.evaluate({x});}catch{y=NaN;}
+    if(!isFinite(y)||Math.abs(y)>ymax*3){deb=true;continue;}
+    if(deb){ctx.moveTo(X(x),Y(y));deb=false;}else ctx.lineTo(X(x),Y(y));
+  }
+  ctx.stroke();
+}
+function echelleAssoc(expr){
+  const fn=math.compile(expr); let m=0;
+  for(let i=0;i<=200;i++){
+    const x=-4+8*i/200;
+    try{const y=Math.abs(fn.evaluate({x}));if(isFinite(y))m=Math.max(m,y);}catch{}
+  }
+  return Math.min(Math.max(m,1),15);
+}
+function melanger(a){
+  for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}
+  return a;
+}
+function assocNouveau(){
+  assocBloque=false;
+  const msg=document.getElementById('assocMsg');
+  msg.textContent=''; msg.className='feedback';
+  const fExpr=BANQUE_ASSOC[Math.floor(Math.random()*BANQUE_ASSOC.length)];
+  const dExpr=math.derivative(fExpr,'x').toString();
+
+  const autres=melanger(BANQUE_ASSOC.filter(e=>e!==fExpr));
+  let leurre2=math.derivative(autres[0],'x').toString();
+  if(leurre2===dExpr) leurre2=math.derivative(autres[1],'x').toString();
+  const options=melanger([dExpr,fExpr,leurre2]);
+  assocBonne=options.indexOf(dExpr);
+
+  katexVers(document.getElementById('assocF'), tex(fExpr));
+  tracerMini(document.getElementById('assocMain'), fExpr, '#3182ce', echelleAssoc(fExpr));
+
+  const zone=document.getElementById('assocChoix'); zone.innerHTML='';
+  options.forEach((expr,i)=>{
+    const b=document.createElement('button');
+    const cv=document.createElement('canvas');
+    cv.width=240; cv.height=160;
+    b.appendChild(cv);
+    const l=document.createElement('div');
+    l.textContent=['A','B','C'][i]; l.style.cssText='font-weight:bold;margin-top:4px';
+    b.appendChild(l);
+    tracerMini(cv, expr, '#e53e3e', echelleAssoc(expr));
+    b.onclick=()=>assocRepondre(i,b,zone);
+    zone.appendChild(b);
+  });
+}
+function assocRepondre(i,btn,zone){
+  if(assocBloque) return;
+  assocBloque=true;
+  const msg=document.getElementById('assocMsg');
+  const boutons=zone.children;
+  profil.total++;
+  if(i===assocBonne){
+    assocSerie++; serie=assocSerie; profil.bonnes++;
+    if(serie>profil.meilleureSerie) profil.meilleureSerie=serie;
+    const gain=15+Math.min(assocSerie,10)*2;
+    btn.style.borderColor='#38a169'; btn.style.background='#f0fff4';
+    msg.className='feedback good pulse';
+    msg.textContent='✅ Bravo ! +'+gain+' XP'+(assocSerie>=3?' · 🔥 série de '+assocSerie:'');
+    sonBon(); gagnerXP(gain);
+    setTimeout(()=>{ if(modeCourant==='assoc') assocNouveau(); },1400);
+  } else {
+    assocSerie=0; serie=0;
+    btn.style.borderColor='#e53e3e'; btn.style.background='#fff5f5';
+    boutons[assocBonne].style.borderColor='#38a169';
+    boutons[assocBonne].style.background='#f0fff4';
+    msg.className='feedback bad';
+    msg.textContent='❌ Raté, la bonne réponse est '+['A','B','C'][assocBonne]+
+      '. Indice : là où f a un sommet, f′ vaut 0 ; là où f monte, f′ est positive.';
+    sonMauvais(); sauver(); majProfil();
+  }
+}
+
+/* =====================================================
    FORMULES (bloc repliable)
    ===================================================== */
 const F=[
@@ -819,6 +1008,7 @@ document.querySelectorAll('#formules li').forEach((li,i)=>katexVers(li,F[i]));
 document.addEventListener('keydown',e=>{
   const t=e.target.tagName;
   if(t==='INPUT'||t==='SELECT'||t==='SUMMARY'||t==='TEXTAREA') return;
+  if(modeCourant==='assoc') return;
   if(/^[0-9x+()]$/.test(e.key)) ins(e.key);
   else if(e.key==='-') ins('−');
   else if(e.key==='*') ins('×');
