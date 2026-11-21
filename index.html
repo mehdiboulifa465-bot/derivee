@@ -1,0 +1,843 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dérivées Quest</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/12.4.0/math.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<style>
+  * { box-sizing:border-box; }
+  body { font-family:Arial,sans-serif; background:linear-gradient(160deg,#ebf4ff,#f7ebff); margin:0; padding:16px; color:#222; min-height:100vh; }
+  .container { max-width:780px; margin:auto; }
+  h1 { text-align:center; color:#2c5282; margin:6px 0 14px; }
+  .card { background:#fff; border-radius:14px; padding:18px; margin-bottom:18px; box-shadow:0 3px 10px rgba(0,0,0,.1); }
+  .tabs { display:flex; gap:8px; margin-bottom:14px; }
+  .tabs button { flex:1; background:#cbd5e0; color:#2d3748; font-weight:bold; }
+  .tabs button.actif { background:#2c5282; color:#fff; }
+
+  .joueur { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+  .avatar { font-size:34px; }
+  .infoJ { flex:1; min-width:180px; }
+  .titreJ { font-weight:bold; color:#2c5282; }
+  .barreXP { height:14px; background:#e2e8f0; border-radius:8px; overflow:hidden; margin-top:4px; }
+  .barreXP div { height:100%; width:0; background:linear-gradient(90deg,#48bb78,#38b2ac); transition:width .5s; }
+  .petit { font-size:12px; color:#555; }
+  .stats { display:flex; gap:10px; font-weight:bold; }
+  .pastille { background:#edf2f7; border-radius:20px; padding:6px 12px; }
+  .btnSon { background:#edf2f7; font-size:18px; padding:6px 10px; }
+
+  .ecran { min-height:70px; background:#1a202c; color:#f7fafc; border-radius:10px; padding:12px 14px;
+           font-size:26px; overflow-x:auto; display:flex; align-items:center; }
+  .ecran .vide { color:#718096; font-size:16px; }
+  .curseur-bloc { display:inline-block; width:2px; height:1.1em; background:#63b3ed; vertical-align:middle; animation:cl 1s steps(1) infinite; }
+  @keyframes cl { 50% { opacity:0; } }
+  .pave { display:grid; grid-template-columns:repeat(6,1fr); gap:6px; margin-top:12px; }
+  .pave button { padding:12px 4px; font-size:17px; margin:0; border-radius:8px; background:#e2e8f0; color:#1a202c; border:none; cursor:pointer; min-height:46px; }
+  .pave button:hover { background:#cbd5e0; }
+  .pave .fn  { background:#bee3f8; } .pave .op  { background:#fbd38d; }
+  .pave .var { background:#c6f6d5; } .pave .ctl { background:#feb2b2; }
+  .pave .go  { background:#38a169; color:#fff; font-weight:bold; }
+  .pave .go:hover { background:#2f855a; }
+  .pave .large2 { grid-column:span 2; }
+
+  button { cursor:pointer; border:none; border-radius:8px; padding:10px 14px; font-size:15px; }
+  .result { font-size:20px; padding:12px; background:#ebf8ff; border-left:4px solid #3182ce; margin-top:12px; border-radius:4px; overflow-x:auto; }
+  .error { background:#fff5f5; border-left-color:#e53e3e; color:#c53030; }
+  canvas { width:100%; border:1px solid #e2e8f0; border-radius:8px; background:#fff; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-top:10px; }
+  select, input.pt { padding:8px; font-size:16px; border:2px solid #cbd5e0; border-radius:8px; }
+  input.pt { width:90px; }
+  .steps li { margin:6px 0; }
+  .formules li { margin:10px 0; overflow-x:auto; }
+  .cacher { display:none; }
+
+  .niveaux { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px; }
+  .niveaux button { background:#edf2f7; font-weight:bold; }
+  .niveaux button.actif { background:#805ad5; color:#fff; }
+  .modes { display:flex; gap:8px; margin-bottom:12px; }
+  .modes button { background:#edf2f7; font-weight:bold; }
+  .modes button.actif { background:#dd6b20; color:#fff; }
+  .hud { display:flex; justify-content:space-between; align-items:center; margin:10px 0; font-weight:bold; flex-wrap:wrap; gap:8px; }
+  .chrono { height:10px; background:#e2e8f0; border-radius:6px; overflow:hidden; margin-bottom:10px; }
+  .chrono div { height:100%; width:100%; background:#48bb78; transition:width .25s linear, background .25s; }
+  .feedback { margin-top:10px; font-weight:bold; font-size:17px; }
+  .good { color:#38a169; } .bad { color:#e53e3e; }
+  .actions { display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; }
+  .indice { background:#fefcbf; color:#744210; font-weight:bold; }
+  .passer { background:#718096; color:#fff; }
+  .encart { background:#fffaf0; border:2px dashed #ed8936; border-radius:10px; padding:12px; margin-top:10px; text-align:center; }
+  .encart button { background:#dd6b20; color:#fff; font-weight:bold; margin-top:8px; }
+  .secoue { animation:shake .4s; }
+  @keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-8px)} 75%{transform:translateX(8px)} }
+  .pulse { animation:pulse .5s; }
+  @keyframes pulse { 50%{transform:scale(1.04)} }
+
+  .badges { display:grid; grid-template-columns:repeat(auto-fill,minmax(130px,1fr)); gap:8px; margin-top:8px; }
+  .badge { text-align:center; padding:10px 6px; border-radius:10px; background:#edf2f7; font-size:13px; filter:grayscale(1); opacity:.5; }
+  .badge.ok { filter:none; opacity:1; background:#fefcbf; }
+  .badge .ico { font-size:28px; display:block; }
+
+  #toast { position:fixed; top:18px; left:50%; transform:translateX(-50%) translateY(-100px); background:#2d3748; color:#fff;
+           padding:12px 20px; border-radius:30px; font-weight:bold; transition:transform .4s; z-index:1000; }
+  #toast.on { transform:translateX(-50%) translateY(0); }
+  #confettis { position:fixed; inset:0; pointer-events:none; z-index:999; width:100%; height:100%; border:none; background:transparent; }
+
+  details summary { cursor:pointer; font-size:1.17em; font-weight:bold; color:#2c5282; padding:4px 0; list-style:none; user-select:none; }
+  details summary::-webkit-details-marker { display:none; }
+  details summary::before { content:"▶"; display:inline-block; font-size:.8em; margin-right:10px; transition:transform .2s; }
+  details[open] summary::before { transform:rotate(90deg); }
+  details summary:hover { color:#3182ce; }
+</style>
+</head>
+<body>
+<div id="toast"></div>
+<canvas id="confettis"></canvas>
+
+<div class="container">
+  <h1>🎮 Dérivées Quest</h1>
+
+  <div class="card joueur">
+    <div class="avatar" id="avatar">🧙</div>
+    <div class="infoJ">
+      <div class="titreJ" id="titreJ">Apprenti – Niv. 1</div>
+      <div class="barreXP"><div id="xpBarre"></div></div>
+      <div class="petit"><span id="xpTxt">0 / 100 XP</span></div>
+    </div>
+    <div class="stats">
+      <span class="pastille">🔥 <span id="serie">0</span></span>
+      <span class="pastille">⭐ <span id="xpTotal">0</span></span>
+    </div>
+    <button class="btnSon" id="btnSon" onclick="basculeSon()" title="Son">🔊</button>
+  </div>
+
+  <div class="card">
+    <div class="tabs">
+      <button id="tabCalc" class="actif" onclick="mode('calc')">🧮 Calculer</button>
+      <button id="tabExo" onclick="mode('exo')">🎯 S'entraîner</button>
+    </div>
+
+    <div id="zoneExo" class="cacher">
+      <div class="niveaux" id="niveaux">
+        <button data-n="1" class="actif" onclick="choisirNiveau(1)">🌱 Débutant</button>
+        <button data-n="2" onclick="choisirNiveau(2)">🌿 Intermédiaire</button>
+        <button data-n="3" onclick="choisirNiveau(3)">🔥 Expert</button>
+      </div>
+      <div class="modes">
+        <button id="mLibre" class="actif" onclick="choisirModeJeu('libre')">☕ Libre</button>
+        <button id="mDefi" onclick="choisirModeJeu('defi')">⚡ Défi (3 ❤️ + chrono)</button>
+      </div>
+      <div class="hud" id="hud">
+        <span id="vies"></span>
+        <span id="scoreSession">Réussites : 0 / 0</span>
+      </div>
+      <div class="chrono cacher" id="chronoBox"><div id="chronoBarre"></div></div>
+      <div id="exo"></div>
+    </div>
+
+    <div id="libelle" style="margin:10px 0 6px;font-weight:bold">f(x) =</div>
+    <div class="ecran" id="ecran"></div>
+
+    <div class="pave">
+      <button class="var" onclick="ins('x')">x</button>
+      <button class="fn" onclick="ins('frac')">▫⁄▫</button>
+      <button class="fn" onclick="ins('pow')">xⁿ</button>
+      <button class="fn" onclick="ins('sq')">x²</button>
+      <button class="fn" onclick="ins('sqrt')">√▫</button>
+      <button class="fn" onclick="ins('exp')">eˣ</button>
+
+      <button class="fn" onclick="ins('sin')">sin</button>
+      <button class="fn" onclick="ins('cos')">cos</button>
+      <button class="fn" onclick="ins('tan')">tan</button>
+      <button class="fn" onclick="ins('ln')">ln</button>
+      <button class="fn" onclick="ins('(')">(</button>
+      <button class="fn" onclick="ins(')')">)</button>
+
+      <button onclick="ins('7')">7</button>
+      <button onclick="ins('8')">8</button>
+      <button onclick="ins('9')">9</button>
+      <button class="op" onclick="ins('÷')">÷</button>
+      <button class="ctl" onclick="eff()">⌫</button>
+      <button class="ctl" onclick="toutEff()">AC</button>
+
+      <button onclick="ins('4')">4</button>
+      <button onclick="ins('5')">5</button>
+      <button onclick="ins('6')">6</button>
+      <button class="op" onclick="ins('×')">×</button>
+      <button class="op" onclick="ins('+')">+</button>
+      <button class="op" onclick="ins('−')">−</button>
+
+      <button onclick="ins('1')">1</button>
+      <button onclick="ins('2')">2</button>
+      <button onclick="ins('3')">3</button>
+      <button onclick="ins('0')">0</button>
+      <button onclick="ins(',')">,</button>
+      <button class="var" onclick="ins('π')">π</button>
+
+      <button class="ctl" onclick="gauche()">◀</button>
+      <button class="ctl" onclick="droite()">▶</button>
+      <button class="go large2" id="btnGo" onclick="valider()">Calculer f′(x)</button>
+      <button class="var large2" onclick="ins('e')">e</button>
+    </div>
+
+    <div id="optCalc" class="row">
+      <label>Ordre :</label>
+      <select id="ordre"><option value="1">f′</option><option value="2">f″</option><option value="3">f‴</option></select>
+      <label>en x =</label>
+      <input class="pt" id="point" placeholder="ex : 2">
+    </div>
+
+    <div class="actions cacher" id="actionsJeu">
+      <button class="indice" onclick="indice()">💡 Indice (−5 XP)</button>
+      <button class="passer" onclick="passer()">⏭ Passer</button>
+    </div>
+
+    <div id="sortie"></div>
+    <div id="feedback" class="feedback"></div>
+  </div>
+
+  <div class="card" id="cardGraph">
+    <h3>Graphique</h3>
+    <canvas id="graph" width="760" height="380"></canvas>
+    <div style="font-size:13px;color:#555;margin-top:6px"><span style="color:#3182ce">■</span> f(x) &nbsp; <span style="color:#e53e3e">■</span> dérivée</div>
+  </div>
+
+  <div class="card">
+    <details>
+      <summary>🏅 Mes badges</summary>
+      <div class="badges" id="badges"></div>
+      <div style="margin-top:12px"><button class="passer" onclick="reinitialiser()">Réinitialiser la progression</button></div>
+    </details>
+  </div>
+
+  <div class="card">
+    <details id="detFormules">
+      <summary>📚 Formules à retenir</summary>
+      <ul class="formules" id="formules"></ul>
+    </details>
+  </div>
+</div>
+
+<script>
+/* =====================================================
+   ÉDITEUR (modèle en arbre avec curseur)
+   ===================================================== */
+let racine = [];
+let cur = {bloc: racine, i: 0};
+let modeCourant = 'calc';
+
+function nouveauContexte(){ racine = []; cur = {bloc:racine, i:0}; }
+
+function ins(k){
+  const b = cur.bloc;
+  const simples = '0123456789xeπ+−×÷(),'.split('');
+  if(simples.includes(k)){
+    b.splice(cur.i,0,{t:'c',v:k}); cur.i++;
+  } else if(k==='frac'){
+    const n = {t:'frac', a:[], b:[]};
+    let j = cur.i;
+    while(j>0 && b[j-1].t==='c' && /[0-9x,πe]/.test(b[j-1].v)){ j--; }
+    const prise = b.splice(j, cur.i-j); cur.i = j;
+    n.a = prise;
+    b.splice(cur.i,0,n);
+    cur = prise.length ? {bloc:n.b, i:0} : {bloc:n.a, i:0};
+  } else if(k==='pow' || k==='sq'){
+    const n = {t:'pow', a:[]};
+    b.splice(cur.i,0,n);
+    if(k==='sq'){ n.a.push({t:'c',v:'2'}); cur = {bloc:b, i:cur.i+1}; }
+    else cur = {bloc:n.a, i:0};
+  } else if(k==='sqrt'){
+    const n = {t:'sqrt', a:[]}; b.splice(cur.i,0,n); cur = {bloc:n.a, i:0};
+  } else if(k==='exp'){
+    const n = {t:'exp', a:[]}; b.splice(cur.i,0,n); cur = {bloc:n.a, i:0};
+  } else if(['sin','cos','tan','ln'].includes(k)){
+    const n = {t:'fn', n:k, a:[]}; b.splice(cur.i,0,n); cur = {bloc:n.a, i:0};
+  }
+  clic(); affiche();
+}
+function chercheParent(bloc, cible=racine){
+  for(let idx=0; idx<cible.length; idx++){
+    const n = cible[idx];
+    for(const cle of ['a','b']){
+      if(n[cle]){
+        if(n[cle]===bloc) return {bloc:cible, i:idx+1, noeud:n, cle};
+        const r = chercheParent(bloc, n[cle]); if(r) return r;
+      }
+    }
+  }
+  return null;
+}
+function droite(){
+  const b=cur.bloc;
+  if(cur.i<b.length) cur.i++;
+  else {
+    const p = chercheParent(b);
+    if(p){
+      if(p.noeud.t==='frac' && p.cle==='a') cur={bloc:p.noeud.b,i:0};
+      else cur={bloc:p.bloc,i:p.i};
+    }
+  }
+  affiche();
+}
+function gauche(){
+  if(cur.i>0) cur.i--;
+  else {
+    const p=chercheParent(cur.bloc);
+    if(p){
+      if(p.noeud.t==='frac' && p.cle==='b') cur={bloc:p.noeud.a,i:p.noeud.a.length};
+      else cur={bloc:p.bloc,i:p.i-1};
+    }
+  }
+  affiche();
+}
+function eff(){
+  const b=cur.bloc;
+  if(cur.i>0){ b.splice(cur.i-1,1); cur.i--; }
+  else {
+    const p=chercheParent(b);
+    if(p && b.length===0){ p.bloc.splice(p.i-1,1); cur={bloc:p.bloc,i:p.i-1}; }
+    else if(p){ cur={bloc:p.bloc,i:p.i-1}; }
+  }
+  affiche();
+}
+function toutEff(){ nouveauContexte(); affiche(); }
+
+/* ---------- Conversions ---------- */
+function latexBloc(b, ici){
+  let s='';
+  for(let i=0;i<=b.length;i++){
+    if(ici && cur.bloc===b && cur.i===i) s+='\\textcolor{#63b3ed}{\\mid}';
+    if(i===b.length) break;
+    s+=latexNoeud(b[i]);
+  }
+  return s || '\\square';
+}
+function latexNoeud(n){
+  switch(n.t){
+    case 'c':
+      if(n.v==='×') return '\\times ';
+      if(n.v==='÷') return '\\div ';
+      if(n.v==='−') return '-';
+      if(n.v==='π') return '\\pi ';
+      if(n.v===',') return '{,}';
+      return n.v;
+    case 'frac': return '\\dfrac{'+latexBloc(n.a,true)+'}{'+latexBloc(n.b,true)+'}';
+    case 'pow':  return '^{'+latexBloc(n.a,true)+'}';
+    case 'sqrt': return '\\sqrt{'+latexBloc(n.a,true)+'}';
+    case 'exp':  return 'e^{'+latexBloc(n.a,true)+'}';
+    case 'fn':   return (n.n==='ln'?'\\ln':'\\'+n.n)+'\\left('+latexBloc(n.a,true)+'\\right)';
+  }
+  return '';
+}
+function mjsBloc(b){
+  let s='';
+  for(let i=0;i<b.length;i++){
+    const n=b[i];
+    switch(n.t){
+      case 'c': s += ({ '×':'*','÷':'/','−':'-',',':'.','π':'pi','e':'e' }[n.v]) ?? n.v; break;
+      case 'frac': s += '(('+mjsBloc(n.a)+')/('+mjsBloc(n.b)+'))'; break;
+      case 'pow':  s += '^('+mjsBloc(n.a)+')'; break;
+      case 'sqrt': s += 'sqrt('+mjsBloc(n.a)+')'; break;
+      case 'exp':  s += 'exp('+mjsBloc(n.a)+')'; break;
+      case 'fn':   s += (n.n==='ln'?'log':n.n)+'('+mjsBloc(n.a)+')'; break;
+    }
+    const suiv=b[i+1];
+    if(suiv && besoinMul(n,suiv)) s+='*';
+  }
+  return s;
+}
+function finValeur(n){ return n.t==='c' ? /[0-9xπe)]/.test(n.v) : ['frac','pow','sqrt','exp','fn'].includes(n.t); }
+function debutValeur(n){ return n.t==='c' ? /[0-9xπe(]/.test(n.v) : ['frac','sqrt','exp','fn'].includes(n.t); }
+function besoinMul(a,b){
+  if(b.t==='pow') return false;
+  if(a.t==='c' && b.t==='c' && /[0-9,]/.test(a.v) && /[0-9,]/.test(b.v)) return false;
+  return finValeur(a) && debutValeur(b);
+}
+function tex(expr){
+  const node = typeof expr==='string' ? math.parse(expr) : expr;
+  return node.toTex({parenthesis:'keep', implicit:'hide'})
+             .replace(/\\mathrm\{log\}/g,'\\ln').replace(/\\cdot/g,'\\cdot\\,');
+}
+function katexVers(el, latex){ katex.render(latex, el, {throwOnError:false}); }
+
+function affiche(){
+  const ec=document.getElementById('ecran');
+  if(racine.length===0){
+    ec.innerHTML = '<span class="curseur-bloc"></span> <span class="vide">&nbsp;Utilise le clavier ci-dessous…</span>';
+    return;
+  }
+  katex.render(latexBloc(racine,true), ec, {throwOnError:false, trust:true});
+}
+
+/* =====================================================
+   SON (Web Audio, aucun fichier externe)
+   ===================================================== */
+let sonActif = true, audioCtx = null;
+function bip(freq, dur=0.12, type='sine', vol=0.15, delai=0){
+  if(!sonActif) return;
+  try{
+    audioCtx = audioCtx || new (window.AudioContext||window.webkitAudioContext)();
+    const t = audioCtx.currentTime + delai;
+    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.type=type; o.frequency.value=freq;
+    g.gain.setValueAtTime(vol,t); g.gain.exponentialRampToValueAtTime(0.001,t+dur);
+    o.connect(g); g.connect(audioCtx.destination); o.start(t); o.stop(t+dur);
+  }catch{}
+}
+function clic(){ bip(520,0.04,'square',0.04); }
+function sonBon(){ bip(523,0.12,'triangle'); bip(659,0.12,'triangle',0.15,0.1); bip(784,0.2,'triangle',0.15,0.2); }
+function sonMauvais(){ bip(220,0.25,'sawtooth',0.12); bip(160,0.3,'sawtooth',0.12,0.15); }
+function sonNiveau(){ [523,659,784,1047].forEach((f,i)=>bip(f,0.18,'triangle',0.15,i*0.12)); }
+function basculeSon(){ sonActif=!sonActif; document.getElementById('btnSon').textContent=sonActif?'🔊':'🔇'; sauver(); }
+
+/* =====================================================
+   PROFIL, XP, BADGES
+   ===================================================== */
+const TITRES=['Apprenti','Initié','Calculateur','Analyste','Expert','Maître','Légende'];
+const AVATARS=['🧙','🧑‍🎓','🧑‍🔬','🦉','🚀','👑','🐉'];
+const BADGES=[
+  {id:'premier',  ico:'🎉', nom:'Première réussite', test:p=>p.bonnes>=1},
+  {id:'dix',      ico:'🔟', nom:'10 bonnes réponses', test:p=>p.bonnes>=10},
+  {id:'cinquante',ico:'💯', nom:'50 bonnes réponses', test:p=>p.bonnes>=50},
+  {id:'serie5',   ico:'🔥', nom:'Série de 5', test:p=>p.meilleureSerie>=5},
+  {id:'serie10',  ico:'🌋', nom:'Série de 10', test:p=>p.meilleureSerie>=10},
+  {id:'expert',   ico:'🧠', nom:'Réussite en Expert', test:p=>p.expert>=1},
+  {id:'defi',     ico:'⚡', nom:'Défi terminé', test:p=>p.defis>=1},
+  {id:'rapide',   ico:'⏱️', nom:'Réponse en moins de 8 s', test:p=>p.rapide>=1},
+  {id:'sans',     ico:'🕊️', nom:'5 réussites sans indice', test:p=>p.sansIndice>=5},
+  {id:'niv5',     ico:'🏆', nom:'Niveau 5 atteint', test:p=>niveauDe(p.xp)>=5}
+];
+let profil = {xp:0,bonnes:0,total:0,meilleureSerie:0,expert:0,defis:0,rapide:0,sansIndice:0,badges:[],son:true};
+let serie = 0;
+
+function sauver(){ profil.son=sonActif; try{localStorage.setItem('derivQuest',JSON.stringify(profil));}catch{} }
+function charger(){
+  try{
+    const s=localStorage.getItem('derivQuest');
+    if(s) profil=Object.assign(profil,JSON.parse(s));
+    sonActif = profil.son!==false;
+    document.getElementById('btnSon').textContent=sonActif?'🔊':'🔇';
+  }catch{}
+}
+function reinitialiser(){
+  if(!confirm('Effacer toute ta progression ?')) return;
+  profil={xp:0,bonnes:0,total:0,meilleureSerie:0,expert:0,defis:0,rapide:0,sansIndice:0,badges:[],son:sonActif};
+  serie=0; sauver(); majProfil(); majBadges();
+}
+/* Seuils d'XP cumulés : 0, 100, 300, 600, 1000, ... */
+function seuil(n){ return 50*n*(n-1); }
+function niveauDe(xp){ let n=1; while(xp>=seuil(n+1)) n++; return n; }
+function majProfil(){
+  const n=niveauDe(profil.xp), a=seuil(n), b=seuil(n+1);
+  const idx=Math.min(TITRES.length-1,Math.floor((n-1)/2));
+  document.getElementById('titreJ').textContent=TITRES[idx]+' – Niv. '+n;
+  document.getElementById('avatar').textContent=AVATARS[idx];
+  document.getElementById('xpBarre').style.width=(100*(profil.xp-a)/(b-a))+'%';
+  document.getElementById('xpTxt').textContent=(profil.xp-a)+' / '+(b-a)+' XP';
+  document.getElementById('xpTotal').textContent=profil.xp;
+  document.getElementById('serie').textContent=serie;
+}
+function majBadges(){
+  document.getElementById('badges').innerHTML = BADGES.map(b=>
+    `<div class="badge ${profil.badges.includes(b.id)?'ok':''}"><span class="ico">${b.ico}</span>${b.nom}</div>`).join('');
+}
+function gagnerXP(pts){
+  const avant=niveauDe(profil.xp);
+  profil.xp=Math.max(0,profil.xp+pts);
+  const apres=niveauDe(profil.xp);
+  if(apres>avant){ toast('🎊 Niveau '+apres+' atteint !'); sonNiveau(); confettis(); }
+  verifierBadges(); majProfil(); sauver();
+}
+function verifierBadges(){
+  BADGES.forEach(b=>{
+    if(!profil.badges.includes(b.id) && b.test(profil)){
+      profil.badges.push(b.id);
+      setTimeout(()=>toast('🏅 Badge : '+b.nom),700);
+    }
+  });
+  majBadges();
+}
+let toastTimer=null;
+function toast(msg){
+  const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('on');
+  clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove('on'),2500);
+}
+
+/* ---------- Confettis ---------- */
+function confettis(){
+  const c=document.getElementById('confettis'), ctx=c.getContext('2d');
+  c.width=innerWidth; c.height=innerHeight;
+  const cols=['#e53e3e','#dd6b20','#ecc94b','#38a169','#3182ce','#805ad5'];
+  const ps=Array.from({length:120},()=>({x:Math.random()*c.width,y:-20-Math.random()*200,
+    vx:(Math.random()-.5)*4,vy:2+Math.random()*4,r:4+Math.random()*5,col:cols[Math.floor(Math.random()*cols.length)],rot:Math.random()*6}));
+  let frames=0;
+  (function anim(){
+    ctx.clearRect(0,0,c.width,c.height);
+    ps.forEach(p=>{p.x+=p.vx;p.y+=p.vy;p.rot+=.1;ctx.save();ctx.translate(p.x,p.y);ctx.rotate(p.rot);
+      ctx.fillStyle=p.col;ctx.fillRect(-p.r,-p.r/2,p.r*2,p.r);ctx.restore();});
+    if(++frames<150) requestAnimationFrame(anim); else ctx.clearRect(0,0,c.width,c.height);
+  })();
+}
+
+/* =====================================================
+   MODES
+   ===================================================== */
+function mode(m){
+  modeCourant=m;
+  document.getElementById('tabCalc').classList.toggle('actif',m==='calc');
+  document.getElementById('tabExo').classList.toggle('actif',m==='exo');
+  document.getElementById('zoneExo').classList.toggle('cacher',m!=='exo');
+  document.getElementById('actionsJeu').classList.toggle('cacher',m!=='exo');
+  document.getElementById('optCalc').classList.toggle('cacher',m!=='calc');
+  document.getElementById('cardGraph').classList.toggle('cacher',m!=='calc');
+  document.getElementById('sortie').innerHTML='';
+  document.getElementById('feedback').innerHTML='';
+  arreterChrono();
+  nouveauContexte();
+  if(m==='exo'){
+    document.getElementById('libelle').textContent="Ta réponse : f′(x) =";
+    document.getElementById('btnGo').textContent='Vérifier';
+    demarrerPartie();
+  } else {
+    document.getElementById('libelle').textContent='f(x) =';
+    document.getElementById('btnGo').textContent='Calculer f′(x)';
+  }
+  affiche();
+}
+function valider(){ modeCourant==='calc' ? calculer() : verifier(); }
+
+/* =====================================================
+   MODE CALCUL
+   ===================================================== */
+function calculer(){
+  const sortie=document.getElementById('sortie');
+  try{
+    const f = mjsBloc(racine);
+    if(!f) throw new Error();
+    const n = parseInt(document.getElementById('ordre').value);
+    let d = math.parse(f);
+    let html = '<div class="result" id="b0"></div>';
+    const blocs=[['b0','f(x) = '+tex(d)]];
+    for(let i=1;i<=n;i++){
+      d = math.simplify(math.derivative(d,'x'));
+      blocs.push(['b'+i, 'f'+"'".repeat(i)+'(x) = \\boldsymbol{'+tex(d)+'}']);
+      html += `<div class="result" id="b${i}"></div>`;
+    }
+    const p=document.getElementById('point').value.trim().replace(',','.');
+    if(p!==''){
+      const val = math.evaluate(d.toString(), {x: math.evaluate(p)});
+      blocs.push(['bp', 'f'+"'".repeat(n)+'('+p+') = '+math.round(val,6)]);
+      html += '<div class="result" id="bp"></div>';
+    }
+    html += etapes(f);
+    sortie.innerHTML = html;
+    blocs.forEach(([id,l])=>katexVers(document.getElementById(id),l));
+    sortie.querySelectorAll('.steps li').forEach(li=>katexInline(li));
+    dessiner(math.parse(f));
+  }catch(e){
+    sortie.innerHTML = `<div class="result error">Expression incomplète ou invalide. Vérifie les parenthèses et les cases vides.</div>`;
+  }
+}
+function katexInline(el){
+  el.innerHTML = el.innerHTML.replace(/\$([^$]+)\$/g,(m,l)=>katex.renderToString(l,{throwOnError:false}));
+}
+function etapes(f){
+  const l=[];
+  if(/sin|cos|tan|exp|log|sqrt/.test(f)) l.push("Fonction usuelle : utilise le tableau des dérivées usuelles.");
+  if(/\)\s*\^|(sin|cos|exp|log|sqrt|tan)\([^x)]/.test(f)) l.push("Fonction composée : $(f\\circ g)' = g' \\times f'(g)$");
+  if(/\*/.test(f.replace(/\d\*x|\d\*\(/g,''))) l.push("Produit : $(uv)' = u'v + uv'$");
+  if(/\//.test(f)) l.push("Quotient : $\\left(\\dfrac{u}{v}\\right)' = \\dfrac{u'v - uv'}{v^2}$");
+  if(/\^/.test(f)) l.push("Puissance : $(x^n)' = n\\,x^{n-1}$");
+  if(/[+-]/.test(f.replace(/^-/,''))) l.push("Somme ou différence : on dérive terme par terme.");
+  if(!l.length) l.push("Applique directement la formule de dérivation correspondante.");
+  return `<h4>💡 Méthode</h4><ul class="steps">${l.map(s=>`<li>${s}</li>`).join('')}</ul>`;
+}
+function dessiner(node){
+  const c=document.getElementById('graph'), ctx=c.getContext('2d');
+  const W=c.width,H=c.height,xmin=-6,xmax=6;
+  ctx.clearRect(0,0,W,H);
+  const f=node.compile(), df=math.derivative(node,'x').compile();
+  let ys=[];
+  for(let i=0;i<=200;i++){const x=xmin+(xmax-xmin)*i/200;try{const y=f.evaluate({x});if(isFinite(y)&&Math.abs(y)<1e4)ys.push(y);}catch{}}
+  let ymax=ys.length?Math.min(Math.max(...ys.map(Math.abs)),20):10; if(ymax<2)ymax=2;
+  const X=x=>(x-xmin)/(xmax-xmin)*W, Y=y=>H/2-(y/ymax)*(H/2);
+  ctx.strokeStyle='#e2e8f0';ctx.lineWidth=1;
+  for(let x=Math.ceil(xmin);x<=xmax;x++){ctx.beginPath();ctx.moveTo(X(x),0);ctx.lineTo(X(x),H);ctx.stroke();}
+  ctx.strokeStyle='#4a5568';ctx.lineWidth=2;
+  ctx.beginPath();ctx.moveTo(0,Y(0));ctx.lineTo(W,Y(0));ctx.stroke();
+  ctx.beginPath();ctx.moveTo(X(0),0);ctx.lineTo(X(0),H);ctx.stroke();
+  const trace=(fn,col)=>{
+    ctx.strokeStyle=col;ctx.lineWidth=2.5;ctx.beginPath();let deb=true;
+    for(let i=0;i<=800;i++){
+      const x=xmin+(xmax-xmin)*i/800; let y; try{y=fn.evaluate({x});}catch{y=NaN;}
+      if(!isFinite(y)||Math.abs(y)>ymax*3){deb=true;continue;}
+      if(deb){ctx.moveTo(X(x),Y(y));deb=false;}else ctx.lineTo(X(x),Y(y));
+    }
+    ctx.stroke();
+  };
+  trace(f,'#3182ce'); trace(df,'#e53e3e');
+}
+
+/* =====================================================
+   MODE JEU : générateur d'exercices
+   ===================================================== */
+const r=(a,b)=>a+Math.floor(Math.random()*(b-a+1));
+const nz=(a,b)=>{let v;do{v=r(a,b)}while(v===0);return v;};
+
+const generateurs={
+  1:[
+    ()=>{const a=nz(-6,6),n=r(2,5);return {f:`${a}*x^${n}`,d:`${a*n}*x^${n-1}`,h:"Puissance : (xⁿ)′ = n·xⁿ⁻¹, le coefficient est conservé."};},
+    ()=>{const a=nz(-5,5),b=nz(-9,9),c=r(2,4);return {f:`${a}*x^${c}+${b}*x`,d:`${a*c}*x^${c-1}+${b}`,h:"Dérive chaque terme séparément."};},
+    ()=>{const a=nz(-5,5),b=nz(-8,8);return {f:`${a}*x^2+${b}`,d:`${2*a}*x`,h:"La dérivée d'une constante est 0."};},
+    ()=>{const a=nz(2,6);return {f:`${a}*sin(x)`,d:`${a}*cos(x)`,h:"(sin x)′ = cos x"};},
+    ()=>{const a=nz(2,6);return {f:`${a}*exp(x)`,d:`${a}*exp(x)`,h:"(eˣ)′ = eˣ"};}
+  ],
+  2:[
+    ()=>({f:`x^2*exp(x)`,d:`2*x*exp(x)+x^2*exp(x)`,h:"Produit : (uv)′ = u′v + uv′"}),
+    ()=>({f:`x*sin(x)`,d:`sin(x)+x*cos(x)`,h:"Produit : (uv)′ = u′v + uv′"}),
+    ()=>({f:`x*log(x)`,d:`log(x)+1`,h:"Produit avec ln : (x·ln x)′ = ln x + 1"}),
+    ()=>{const a=nz(2,6);return {f:`exp(${a}*x)`,d:`${a}*exp(${a}*x)`,h:"Composée : (e^u)′ = u′·e^u"};},
+    ()=>{const a=nz(2,5);return {f:`sin(${a}*x)`,d:`${a}*cos(${a}*x)`,h:"Composée : (sin u)′ = u′·cos u"};},
+    ()=>{const a=nz(2,5);return {f:`cos(${a}*x)`,d:`-${a}*sin(${a}*x)`,h:"Composée : (cos u)′ = −u′·sin u"};},
+    ()=>{const a=nz(2,4);return {f:`(${a}*x+1)^2`,d:`${2*a}*(${a}*x+1)`,h:"Composée : (u²)′ = 2u′u"};},
+    ()=>({f:`1/x`,d:`-1/x^2`,h:"Inverse : (1/x)′ = −1/x²"}),
+    ()=>({f:`sqrt(x)`,d:`1/(2*sqrt(x))`,h:"(√x)′ = 1/(2√x)"})
+  ],
+  3:[
+    ()=>{const a=r(2,4);return {f:`(x+${a})/(x-${a})`,d:`${-2*a}/(x-${a})^2`,h:"Quotient : (u/v)′ = (u′v − uv′)/v²"};},
+    ()=>({f:`x^2*sin(x)`,d:`2*x*sin(x)+x^2*cos(x)`,h:"Produit : (uv)′ = u′v + uv′"}),
+    ()=>{const a=r(2,4);return {f:`exp(x)*cos(${a}*x)`,d:`exp(x)*cos(${a}*x)-${a}*exp(x)*sin(${a}*x)`,h:"Produit puis composée."};},
+    ()=>{const a=r(2,4);return {f:`log(${a}*x+1)`,d:`${a}/(${a}*x+1)`,h:"Composée : (ln u)′ = u′/u"};},
+    ()=>({f:`sin(x)/x`,d:`(x*cos(x)-sin(x))/x^2`,h:"Quotient : (u/v)′ = (u′v − uv′)/v²"}),
+    ()=>{const a=r(2,4);return {f:`sin(x^${a})`,d:`${a}*x^${a-1}*cos(x^${a})`,h:"Composée : (sin u)′ = u′·cos u, avec u = xⁿ."};},
+    ()=>({f:`x*exp(-x)`,d:`exp(-x)-x*exp(-x)`,h:"Produit et composée : (e^{−x})′ = −e^{−x}"}),
+    ()=>{const a=r(2,4);return {f:`sqrt(${a}*x+1)`,d:`${a}/(2*sqrt(${a}*x+1))`,h:"Composée : (√u)′ = u′/(2√u)"};}
+  ]
+};
+
+/* ---------- État de la partie ---------- */
+let niveauJeu=1, modeJeu='libre', exo=null;
+let reussites=0, essais=0, vies=3, indiceUtilise=false, debutQuestion=0;
+const TEMPS_DEFI=30;
+let chronoId=null, tempsRestant=TEMPS_DEFI, partieFinie=false, questionsDefi=0;
+
+function choisirNiveau(n){
+  niveauJeu=n;
+  document.querySelectorAll('#niveaux button').forEach(b=>b.classList.toggle('actif',+b.dataset.n===n));
+  demarrerPartie();
+}
+function choisirModeJeu(m){
+  modeJeu=m;
+  document.getElementById('mLibre').classList.toggle('actif',m==='libre');
+  document.getElementById('mDefi').classList.toggle('actif',m==='defi');
+  demarrerPartie();
+}
+function demarrerPartie(){
+  arreterChrono();
+  reussites=0; essais=0; vies=3; serie=0; partieFinie=false; questionsDefi=0;
+  document.getElementById('btnGo').disabled=false;
+  majHUD(); majProfil();
+  nouvelleQuestion();
+}
+function majHUD(){
+  document.getElementById('vies').innerHTML = modeJeu==='defi'
+    ? '❤️'.repeat(vies)+'🖤'.repeat(3-vies) : '☕ Mode libre';
+  document.getElementById('scoreSession').textContent='Réussites : '+reussites+' / '+essais;
+  document.getElementById('chronoBox').classList.toggle('cacher',modeJeu!=='defi');
+}
+function nouvelleQuestion(){
+  if(partieFinie) return;
+  const liste=generateurs[niveauJeu];
+  let nouveau, essaisGen=0;
+  do{ nouveau=liste[Math.floor(Math.random()*liste.length)](); essaisGen++; }
+  while(exo && nouveau.f===exo.f && essaisGen<10);
+  exo=nouveau; indiceUtilise=false; debutQuestion=Date.now();
+  document.getElementById('exo').innerHTML='Calcule la dérivée de :<div class="result" id="exoTex"></div>';
+  katexVers(document.getElementById('exoTex'),'f(x) = '+tex(exo.f));
+  document.getElementById('feedback').innerHTML='';
+  nouveauContexte(); affiche();
+  if(modeJeu==='defi') lancerChrono();
+}
+
+/* ---------- Chrono ---------- */
+function lancerChrono(){
+  arreterChrono(); tempsRestant=TEMPS_DEFI; majChrono();
+  chronoId=setInterval(()=>{
+    tempsRestant-=0.25; majChrono();
+    if(tempsRestant<=0){ arreterChrono(); tempsEcoule(); }
+  },250);
+}
+function arreterChrono(){ if(chronoId){clearInterval(chronoId);chronoId=null;} }
+function majChrono(){
+  const b=document.getElementById('chronoBarre');
+  const pct=Math.max(0,100*tempsRestant/TEMPS_DEFI);
+  b.style.width=pct+'%';
+  b.style.background = pct>50?'#48bb78':pct>20?'#ecc94b':'#e53e3e';
+}
+function tempsEcoule(){
+  const fb=document.getElementById('feedback');
+  fb.className='feedback bad';
+  fb.innerHTML="⏰ Temps écoulé ! Réponse : <span id='sol'></span>";
+  katexVers(document.getElementById('sol'),"f'(x) = "+tex(exo.d));
+  perdreVie();
+}
+
+/* ---------- Vérification ---------- */
+function verifier(){
+  if(partieFinie) return;
+  const fb=document.getElementById('feedback');
+  let rep;
+  try{
+    rep=mjsBloc(racine);
+    if(!rep) return;
+    math.compile(rep);
+  }catch{ fb.className='feedback bad'; fb.textContent='Expression incomplète ou invalide.'; return; }
+
+  let ok=true;
+  try{
+    const a=math.compile(rep), b=math.compile(exo.d);
+    for(const x of [0.5,1.3,2,2.7,3.9]){
+      const va=a.evaluate({x}), vb=b.evaluate({x});
+      if(typeof va!=='number' || Math.abs(va-vb)>1e-6*(1+Math.abs(vb))){ok=false;break;}
+    }
+  }catch{ ok=false; }
+
+  arreterChrono();
+  essais++; profil.total++;
+  const duree=(Date.now()-debutQuestion)/1000;
+
+  if(ok){
+    reussites++; serie++; profil.bonnes++;
+    if(serie>profil.meilleureSerie) profil.meilleureSerie=serie;
+    if(niveauJeu===3) profil.expert++;
+    if(duree<8) profil.rapide++;
+    if(!indiceUtilise) profil.sansIndice++;
+
+    let gain=10*niveauJeu;
+    if(!indiceUtilise) gain+=5;
+    if(duree<8) gain+=5;
+    gain+=Math.min(serie,10)*2;
+    if(modeJeu==='defi') gain+=Math.round(Math.max(0,tempsRestant)/3);
+
+    fb.style.color='';
+    fb.className='feedback good pulse';
+    fb.innerHTML="✅ Bravo ! +"+gain+" XP"+(serie>=3?" · 🔥 série de "+serie:"");
+    sonBon();
+    gagnerXP(gain);
+    majHUD();
+    questionsDefi++;
+    if(modeJeu==='defi' && questionsDefi>=10){ finDefi(true); return; }
+    setTimeout(()=>{ fb.classList.remove('pulse'); nouvelleQuestion(); },1100);
+  } else {
+    fb.style.color='';
+    fb.className='feedback bad';
+    fb.innerHTML="❌ Ce n'est pas ça. Réponse attendue : <span id='sol'></span>";
+    katexVers(document.getElementById('sol'),"f'(x) = "+tex(exo.d));
+    document.getElementById('ecran').classList.add('secoue');
+    setTimeout(()=>document.getElementById('ecran').classList.remove('secoue'),450);
+    sonMauvais();
+    serie=0;
+    sauver();
+    perdreVie();
+  }
+}
+
+/* ---------- Vies et fin de partie ---------- */
+function perdreVie(){
+  serie=0;
+  if(modeJeu==='defi'){
+    vies--;
+    majHUD(); majProfil();
+    if(vies<=0){ finDefi(false); return; }
+    setTimeout(()=>{ if(!partieFinie) nouvelleQuestion(); },2200);
+  } else {
+    majHUD(); majProfil();
+    setTimeout(()=>{ if(!partieFinie) nouvelleQuestion(); },2500);
+  }
+}
+function finDefi(victoire){
+  partieFinie=true;
+  arreterChrono();
+  document.getElementById('btnGo').disabled=true;
+  if(victoire){
+    profil.defis++;
+    gagnerXP(50);
+    confettis();
+  }
+  sauver(); verifierBadges();
+  const fb=document.getElementById('feedback');
+  const html = victoire
+    ? "🏆 Défi réussi ! Bonus +50 XP"
+    : "💀 Plus de vies…";
+  fb.className='feedback '+(victoire?'good':'bad');
+  fb.innerHTML=html+`<div class="encart">Score final : <b>${reussites}</b> réussite(s) sur <b>${essais}</b><br>
+    <button onclick="demarrerPartie()">🔄 Rejouer</button></div>`;
+}
+
+/* ---------- Indice et passer ---------- */
+function indice(){
+  if(modeCourant!=='exo' || partieFinie || !exo) return;
+  const fb=document.getElementById('feedback');
+  if(!indiceUtilise){ indiceUtilise=true; gagnerXP(-5); }
+  fb.className='feedback';
+  fb.style.color='#744210';
+  fb.textContent='💡 '+exo.h;
+}
+function passer(){
+  if(modeCourant!=='exo' || partieFinie || !exo) return;
+  arreterChrono();
+  essais++; profil.total++; serie=0;
+  const fb=document.getElementById('feedback');
+  fb.style.color='';
+  fb.className='feedback bad';
+  fb.innerHTML="⏭ Question passée. Réponse : <span id='sol'></span>";
+  katexVers(document.getElementById('sol'),"f'(x) = "+tex(exo.d));
+  sauver();
+  perdreVie();
+}
+
+/* =====================================================
+   FORMULES (bloc repliable)
+   ===================================================== */
+const F=[
+ "(k)' = 0 \\quad ; \\quad (x)' = 1 \\quad ; \\quad (x^n)' = n\\,x^{n-1}",
+ "(u+v)' = u'+v' \\quad ; \\quad (k\\,u)' = k\\,u'",
+ "(uv)' = u'v + uv'",
+ "\\left(\\dfrac{u}{v}\\right)' = \\dfrac{u'v - uv'}{v^2}",
+ "(\\sin x)' = \\cos x \\quad ; \\quad (\\cos x)' = -\\sin x",
+ "(e^x)' = e^x \\quad ; \\quad (\\ln x)' = \\dfrac{1}{x} \\quad ; \\quad (\\sqrt{x})' = \\dfrac{1}{2\\sqrt{x}}",
+ "(f\\circ g)' = g' \\times f'(g)",
+ "(e^{u})' = u'e^{u} \\quad ; \\quad (\\ln u)' = \\dfrac{u'}{u} \\quad ; \\quad (u^n)' = n\\,u'\\,u^{n-1}"
+];
+document.getElementById('formules').innerHTML=F.map(()=>'<li></li>').join('');
+document.querySelectorAll('#formules li').forEach((li,i)=>katexVers(li,F[i]));
+
+/* =====================================================
+   CLAVIER PHYSIQUE
+   ===================================================== */
+document.addEventListener('keydown',e=>{
+  const t=e.target.tagName;
+  if(t==='INPUT'||t==='SELECT'||t==='SUMMARY'||t==='TEXTAREA') return;
+  if(/^[0-9x+()]$/.test(e.key)) ins(e.key);
+  else if(e.key==='-') ins('−');
+  else if(e.key==='*') ins('×');
+  else if(e.key==='/') { e.preventDefault(); ins('frac'); }
+  else if(e.key==='^') ins('pow');
+  else if(e.key===',' || e.key==='.') ins(',');
+  else if(e.key==='Backspace') eff();
+  else if(e.key==='ArrowRight') { e.preventDefault(); droite(); }
+  else if(e.key==='ArrowLeft') { e.preventDefault(); gauche(); }
+  else if(e.key==='Enter') valider();
+});
+
+/* =====================================================
+   DÉMARRAGE
+   ===================================================== */
+charger();
+majBadges();
+majProfil();
+mode('calc');
+</script>
+</body>
+</html>
