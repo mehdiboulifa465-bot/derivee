@@ -381,7 +381,14 @@ function besoinMul(a,b){
 }
 function tex(expr){
   const node = typeof expr==='string' ? math.parse(expr) : expr;
-  return node.toTex({parenthesis:'keep', implicit:'hide'})
+  // Transforme exp(u) en e^u pour l'affichage
+  const noeud = node.transform(n=>{
+    if(n.isFunctionNode && n.fn.name==='exp' && n.args.length===1){
+      return new math.OperatorNode('^','pow',[new math.SymbolNode('e'), n.args[0]]);
+    }
+    return n;
+  });
+  return noeud.toTex({parenthesis:'keep', implicit:'hide'})
              .replace(/\\mathrm\{log\}/g,'\\ln').replace(/\\cdot/g,'\\cdot\\,');
 }
 function katexVers(el, latex){ katex.render(latex, el, {throwOnError:false}); }
