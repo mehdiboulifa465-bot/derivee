@@ -94,6 +94,13 @@
   #assocChoix { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-top:10px; }
   #assocChoix button { padding:6px; border:2px solid #cbd5e0; border-radius:10px; background:#fff; }
   #assocChoix canvas { border:none; }
+
+  /* Statistiques */
+  .tabStats { width:100%; border-collapse:collapse; font-size:14px; }
+  .tabStats th { background:#edf2f7; text-align:left; padding:8px; }
+  .tabStats td { padding:8px; border-bottom:1px solid #e2e8f0; vertical-align:middle; }
+  .barrePct { height:6px; background:#e2e8f0; border-radius:4px; margin-top:3px; }
+  .barrePct div { height:100%; border-radius:4px; }
 </style>
 </head>
 <body>
@@ -145,6 +152,11 @@
 
     <!-- MODE ASSOCIE -->
     <div id="zoneAssoc" class="cacher">
+      <div class="niveaux" id="niveauxAssoc">
+        <button data-n="1" class="actif" onclick="choisirNiveauAssoc(1)">🌱 Facile</button>
+        <button data-n="2" onclick="choisirNiveauAssoc(2)">🌿 Moyen</button>
+        <button data-n="3" onclick="choisirNiveauAssoc(3)">🔥 Difficile</button>
+      </div>
       <div style="font-weight:bold;margin-bottom:6px">Quelle courbe est la dérivée de f ?</div>
       <div style="font-size:15px;margin:6px 0">
         <span style="color:#3182ce">■</span> f(x) = <span id="assocF"></span>
@@ -233,6 +245,13 @@
       <summary>🏅 Mes badges</summary>
       <div class="badges" id="badges"></div>
       <div style="margin-top:12px"><button class="passer" onclick="reinitialiser()">Réinitialiser la progression</button></div>
+    </details>
+  </div>
+
+  <div class="card">
+    <details>
+      <summary>📊 Mes statistiques</summary>
+      <div id="statsTable" style="margin-top:10px;overflow-x:auto"></div>
     </details>
   </div>
 
@@ -341,7 +360,7 @@ function latexBloc(b, ici){
 function latexNoeud(n){
   switch(n.t){
     case 'c':
-      if(n.v==='×') return '\\times ';
+      if(n.v==='×') return '\\,';
       if(n.v==='÷') return '\\div ';
       if(n.v==='−') return '-';
       if(n.v==='π') return '\\pi ';
@@ -381,16 +400,45 @@ function besoinMul(a,b){
 }
 function tex(expr){
   const node = typeof expr==='string' ? math.parse(expr) : expr;
-  // Transforme exp(u) en e^u pour l'affichage
-  const noeud = node.transform(n=>{
-    if(n.isFunctionNode && n.fn.name==='exp' && n.args.length===1){
-      return new math.OperatorNode('^','pow',[new math.SymbolNode('e'), n.args[0]]);
-    }
-    return n;
-  });
-  return noeud.toTex({parenthesis:'keep', implicit:'hide'})
-             .replace(/\\mathrm\{log\}/g,'\\ln').replace(/\\cdot/g,'\\cdot\\,');
+  let s = node.toTex({parenthesis:'keep', implicit:'hide'});
+  s = convertirExp(s);
+  s = s.replace(/\\mathrm\{log\}/g,'\\ln');
+  return supprimerPoints(s);
 }
+
+function supprimerPoints(s){
+  s = s.replace(/(\d(?:\.\d+)?)\s*\\cdot\s*(?=\d)/g, '$1\\times ');
+  s = s.replace(/\\cdot\s*/g, '\\,');
+  s = s.replace(/\\,(?=\s*[\^_)}])/g, '');
+  s = s.replace(/\\,\\,+/g, '\\,');
+  s = s.replace(/(\d)\\,(?=[a-zA-Z\\])/g, '$1');
+  return s;
+}
+
+function convertirExp(s){
+  const motifs = ['\\exp\\left(', '\\mathrm{exp}\\left(', 'exp\\left('];
+  let trouve = true;
+  while(trouve){
+    trouve = false;
+    for(const m of motifs){
+      const debut = s.indexOf(m);
+      if(debut === -1) continue;
+      let prof = 1, i = debut + m.length;
+      while(i < s.length && prof > 0){
+        if(s.startsWith('\\left(', i)){ prof++; i += 6; }
+        else if(s.startsWith('\\right)', i)){ prof--; if(prof===0) break; i += 7; }
+        else i++;
+      }
+      const contenu = s.slice(debut + m.length, i);
+      const fin = i + 7;
+      s = s.slice(0, debut) + 'e^{' + contenu + '}' + s.slice(fin);
+      trouve = true;
+      break;
+    }
+  }
+  return s;
+}
+
 function katexVers(el, latex){ katex.render(latex, el, {throwOnError:false}); }
 
 function affiche(){
@@ -424,7 +472,7 @@ function sonNiveau(){ [523,659,784,1047].forEach((f,i)=>bip(f,0.18,'triangle',0.
 function basculeSon(){ sonActif=!sonActif; document.getElementById('btnSon').textContent=sonActif?'🔊':'🔇'; sauver(); }
 
 /* =====================================================
-   PROFIL, XP, BADGES
+   PROFIL, XP, BADGES, STATS
    ===================================================== */
 const TITRES=['Apprenti','Initié','Calculateur','Analyste','Expert','Maître','Légende'];
 const AVATARS=['🧙','🧑‍🎓','🧑‍🔬','🦉','🚀','👑','🐉'];
@@ -440,7 +488,7 @@ const BADGES=[
   {id:'sans',     ico:'🕊️', nom:'5 réussites sans indice', test:p=>p.sansIndice>=5},
   {id:'niv5',     ico:'🏆', nom:'Niveau 5 atteint', test:p=>niveauDe(p.xp)>=5}
 ];
-let profil = {xp:0,bonnes:0,total:0,meilleureSerie:0,expert:0,defis:0,rapide:0,sansIndice:0,badges:[],son:true};
+let profil = {xp:0,bonnes:0,total:0,meilleureSerie:0,expert:0,defis:0,rapide:0,sansIndice:0,badges:[],son:true,stats:{}};
 let serie = 0;
 
 function sauver(){ profil.son=sonActif; try{localStorage.setItem('derivQuest',JSON.stringify(profil));}catch{} }
@@ -448,14 +496,15 @@ function charger(){
   try{
     const s=localStorage.getItem('derivQuest');
     if(s) profil=Object.assign(profil,JSON.parse(s));
+    if(!profil.stats) profil.stats={};
     sonActif = profil.son!==false;
     document.getElementById('btnSon').textContent=sonActif?'🔊':'🔇';
   }catch{}
 }
 function reinitialiser(){
   if(!confirm('Effacer toute ta progression ?')) return;
-  profil={xp:0,bonnes:0,total:0,meilleureSerie:0,expert:0,defis:0,rapide:0,sansIndice:0,badges:[],son:sonActif};
-  serie=0; sauver(); majProfil(); majBadges();
+  profil={xp:0,bonnes:0,total:0,meilleureSerie:0,expert:0,defis:0,rapide:0,sansIndice:0,badges:[],son:sonActif,stats:{}};
+  serie=0; sauver(); majProfil(); majBadges(); majStats();
 }
 /* Seuils d'XP cumulés : 0, 100, 300, 600, 1000, ... */
 function seuil(n){ return 50*n*(n-1); }
@@ -474,6 +523,45 @@ function majBadges(){
   document.getElementById('badges').innerHTML = BADGES.map(b=>
     `<div class="badge ${profil.badges.includes(b.id)?'ok':''}"><span class="ico">${b.ico}</span>${b.nom}</div>`).join('');
 }
+
+/* ---------- Statistiques par niveau ---------- */
+const NOMS_STATS = {
+  'exo1':'🎯 Entraînement – Débutant',
+  'exo2':'🎯 Entraînement – Intermédiaire',
+  'exo3':'🎯 Entraînement – Expert',
+  'assoc1':'📈 Associe – Facile',
+  'assoc2':'📈 Associe – Moyen',
+  'assoc3':'📈 Associe – Difficile'
+};
+function enregistrerStat(cle, reussi, serieActuelle){
+  if(!profil.stats) profil.stats = {};
+  const s = profil.stats[cle] || {essais:0, bonnes:0, serie:0};
+  s.essais++;
+  if(reussi) s.bonnes++;
+  if(serieActuelle > s.serie) s.serie = serieActuelle;
+  profil.stats[cle] = s;
+  majStats();
+}
+function majStats(){
+  const zone = document.getElementById('statsTable');
+  if(!zone) return;
+  const st = profil.stats || {};
+  let html = '<table class="tabStats"><tr><th>Catégorie</th><th>Essais</th><th>Réussite</th><th>Meilleure série</th></tr>';
+  for(const cle of Object.keys(NOMS_STATS)){
+    const s = st[cle] || {essais:0,bonnes:0,serie:0};
+    const pct = s.essais ? Math.round(100*s.bonnes/s.essais) : 0;
+    const couleur = pct>=75 ? '#38a169' : pct>=50 ? '#dd6b20' : '#e53e3e';
+    html += `<tr>
+      <td>${NOMS_STATS[cle]}</td>
+      <td>${s.essais}</td>
+      <td>${s.essais
+        ? `<b style="color:${couleur}">${pct} %</b><div class="barrePct"><div style="width:${pct}%;background:${couleur}"></div></div>`
+        : '–'}</td>
+      <td>${s.serie}</td></tr>`;
+  }
+  zone.innerHTML = html + '</table>';
+}
+
 function gagnerXP(pts){
   const avant=niveauDe(profil.xp);
   profil.xp=Math.max(0,profil.xp+pts);
@@ -585,7 +673,7 @@ function katexInline(el){
 function etapes(f){
   const l=[];
   if(/sin|cos|tan|exp|log|sqrt/.test(f)) l.push("Fonction usuelle : utilise le tableau des dérivées usuelles.");
-  if(/\)\s*\^|(sin|cos|exp|log|sqrt|tan)\([^x)]/.test(f)) l.push("Fonction composée : $(f\\circ g)' = g' \\times f'(g)$");
+  if(/\)\s*\^|(sin|cos|exp|log|sqrt|tan)\([^x)]/.test(f)) l.push("Fonction composée : $(f\\circ g)' = g'\\,f'(g)$");
   if(/\*/.test(f.replace(/\d\*x|\d\*\(/g,''))) l.push("Produit : $(uv)' = u'v + uv'$");
   if(/\//.test(f)) l.push("Quotient : $\\left(\\dfrac{u}{v}\\right)' = \\dfrac{u'v - uv'}{v^2}$");
   if(/\^/.test(f)) l.push("Puissance : $(x^n)' = n\\,x^{n-1}$");
@@ -672,361 +760,361 @@ function trace(){
     xTan=graphe.xmin+Math.max(0,Math.min(1,px))*(graphe.xmax-graphe.xmin);
     trace();
   }
-  c.addEventListener('pointerdown',e=>{actif=true;c.setPointerCapture(e.pointerId);deplace(e);});
-  c.addEventListener('pointermove',e=>{if(actif)deplace(e);});
-  c.addEventListener('pointerup',()=>actif=false);
-  c.addEventListener('pointercancel',()=>actif=false);
+  c.addEventListener('pointerdown',e=>{    actif=true; c.setPointerCapture(e.pointerId); deplace(e);
+  });
+  c.addEventListener('pointermove',e=>{ if(actif) deplace(e); });
+  c.addEventListener('pointerup',()=>{ actif=false; });
+  c.addEventListener('pointercancel',()=>{ actif=false; });
 })();
 
 /* =====================================================
-   MODE JEU : générateur d'exercices
+   MODE ENTRAINEMENT
    ===================================================== */
-const r=(a,b)=>a+Math.floor(Math.random()*(b-a+1));
-const nz=(a,b)=>{let v;do{v=r(a,b)}while(v===0);return v;};
-
-const generateurs={
-  1:[
-    ()=>{const a=nz(-6,6),n=r(2,5);return {f:`${a}*x^${n}`,d:`${a*n}*x^${n-1}`,h:"Puissance : (xⁿ)′ = n·xⁿ⁻¹, le coefficient est conservé."};},
-    ()=>{const a=nz(-5,5),b=nz(-9,9),c=r(2,4);return {f:`${a}*x^${c}+${b}*x`,d:`${a*c}*x^${c-1}+${b}`,h:"Dérive chaque terme séparément."};},
-    ()=>{const a=nz(-5,5),b=nz(-8,8);return {f:`${a}*x^2+${b}`,d:`${2*a}*x`,h:"La dérivée d'une constante est 0."};},
-    ()=>{const a=nz(2,6);return {f:`${a}*sin(x)`,d:`${a}*cos(x)`,h:"(sin x)′ = cos x"};},
-    ()=>{const a=nz(2,6);return {f:`${a}*exp(x)`,d:`${a}*exp(x)`,h:"(eˣ)′ = eˣ"};}
+const BANQUE = {
+  1: [
+    'x^2','x^3','x^4','3*x^2+2*x','5*x^3-x','x^5-2*x','4*x^2-3*x+1','2*x^3+x^2',
+    'sin(x)','cos(x)','exp(x)','log(x)','sqrt(x)','7*x','x^2+5','x^3-x^2+x'
   ],
-  2:[
-    ()=>({f:`x^2*exp(x)`,d:`2*x*exp(x)+x^2*exp(x)`,h:"Produit : (uv)′ = u′v + uv′"}),
-    ()=>({f:`x*sin(x)`,d:`sin(x)+x*cos(x)`,h:"Produit : (uv)′ = u′v + uv′"}),
-    ()=>({f:`x*log(x)`,d:`log(x)+1`,h:"Produit avec ln : (x·ln x)′ = ln x + 1"}),
-    ()=>{const a=nz(2,6);return {f:`exp(${a}*x)`,d:`${a}*exp(${a}*x)`,h:"Composée : (e^u)′ = u′·e^u"};},
-    ()=>{const a=nz(2,5);return {f:`sin(${a}*x)`,d:`${a}*cos(${a}*x)`,h:"Composée : (sin u)′ = u′·cos u"};},
-    ()=>{const a=nz(2,5);return {f:`cos(${a}*x)`,d:`-${a}*sin(${a}*x)`,h:"Composée : (cos u)′ = −u′·sin u"};},
-    ()=>{const a=nz(2,4);return {f:`(${a}*x+1)^2`,d:`${2*a}*(${a}*x+1)`,h:"Composée : (u²)′ = 2u′u"};},
-    ()=>({f:`1/x`,d:`-1/x^2`,h:"Inverse : (1/x)′ = −1/x²"}),
-    ()=>({f:`sqrt(x)`,d:`1/(2*sqrt(x))`,h:"(√x)′ = 1/(2√x)"})
+  2: [
+    'x*exp(x)','x*sin(x)','x*cos(x)','x^2*exp(x)','x*log(x)','x^2*sin(x)',
+    'sin(x)*cos(x)','exp(x)*sin(x)','exp(x)*cos(x)','x^3*log(x)',
+    'x/(x+1)','1/x','(x+1)/(x-1)','exp(x)/x','sin(x)/x','x^2/(x+2)'
   ],
-  3:[
-    ()=>{const a=r(2,4);return {f:`(x+${a})/(x-${a})`,d:`${-2*a}/(x-${a})^2`,h:"Quotient : (u/v)′ = (u′v − uv′)/v²"};},
-    ()=>({f:`x^2*sin(x)`,d:`2*x*sin(x)+x^2*cos(x)`,h:"Produit : (uv)′ = u′v + uv′"}),
-    ()=>{const a=r(2,4);return {f:`exp(x)*cos(${a}*x)`,d:`exp(x)*cos(${a}*x)-${a}*exp(x)*sin(${a}*x)`,h:"Produit puis composée."};},
-    ()=>{const a=r(2,4);return {f:`log(${a}*x+1)`,d:`${a}/(${a}*x+1)`,h:"Composée : (ln u)′ = u′/u"};},
-    ()=>({f:`sin(x)/x`,d:`(x*cos(x)-sin(x))/x^2`,h:"Quotient : (u/v)′ = (u′v − uv′)/v²"}),
-    ()=>{const a=r(2,4);return {f:`sin(x^${a})`,d:`${a}*x^${a-1}*cos(x^${a})`,h:"Composée : (sin u)′ = u′·cos u, avec u = xⁿ."};},
-    ()=>({f:`x*exp(-x)`,d:`exp(-x)-x*exp(-x)`,h:"Produit et composée : (e^{−x})′ = −e^{−x}"}),
-    ()=>{const a=r(2,4);return {f:`sqrt(${a}*x+1)`,d:`${a}/(2*sqrt(${a}*x+1))`,h:"Composée : (√u)′ = u′/(2√u)"};}
+  3: [
+    'sin(2*x)','cos(3*x)','exp(2*x)','exp(3*x)','log(2*x+1)','sqrt(x^2+1)',
+    'sin(x^2)','cos(x^2)','exp(x^2)','exp(-x)','exp(-x^2)','log(x^2+1)',
+    '(x^2+1)^3','(2*x+1)^4','sin(x)^2','cos(x)^3','tan(x)','exp(2*x)*sin(x)',
+    'x*exp(-x)','log(x)/x','sqrt(1-x^2)','sin(3*x+1)'
   ]
 };
+let niveauJeu = 1, modeJeu = 'libre';
+let exoCourant = null, nbIndices = 0, debutQuestion = 0;
+let vies = 3, reussitesSession = 0, essais = 0;
+let chronoTimer = null, tempsRestant = 0, tempsTotal = 0;
+const TEMPS_NIVEAU = {1:40, 2:60, 3:90};
 
-/* ---------- État de la partie ---------- */
-let niveauJeu=1, modeJeu='libre', exo=null;
-let reussites=0, essais=0, vies=3, indiceUtilise=false, debutQuestion=0;
-const TEMPS_DEFI=30;
-let chronoId=null, tempsRestant=TEMPS_DEFI, partieFinie=false, questionsDefi=0;
+function melanger(t){
+  const a = t.slice();
+  for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; }
+  return a;
+}
 
 function choisirNiveau(n){
-  niveauJeu=n;
+  niveauJeu = n;
   document.querySelectorAll('#niveaux button').forEach(b=>b.classList.toggle('actif',+b.dataset.n===n));
   demarrerPartie();
 }
 function choisirModeJeu(m){
-  modeJeu=m;
+  modeJeu = m;
   document.getElementById('mLibre').classList.toggle('actif',m==='libre');
   document.getElementById('mDefi').classList.toggle('actif',m==='defi');
   demarrerPartie();
 }
 function demarrerPartie(){
   arreterChrono();
-  reussites=0; essais=0; vies=3; serie=0; partieFinie=false; questionsDefi=0;
-  document.getElementById('btnGo').disabled=false;
-  majHUD(); majProfil();
-  nouvelleQuestion();
+  vies = 3; reussitesSession = 0; essais = 0; serie = 0;
+  document.getElementById('chronoBox').classList.toggle('cacher', modeJeu!=='defi');
+  majHud(); majProfil();
+  nouvelExo();
 }
-function majHUD(){
-  document.getElementById('vies').innerHTML = modeJeu==='defi'
-    ? '❤️'.repeat(vies)+'🖤'.repeat(3-vies) : '☕ Mode libre';
-  document.getElementById('scoreSession').textContent='Réussites : '+reussites+' / '+essais;
-  document.getElementById('chronoBox').classList.toggle('cacher',modeJeu!=='defi');
+function majHud(){
+  document.getElementById('vies').textContent = modeJeu==='defi' ? '❤️'.repeat(vies)+'🖤'.repeat(3-vies) : '☕ Mode libre';
+  document.getElementById('scoreSession').textContent = 'Réussites : '+reussitesSession+' / '+essais;
 }
-function nouvelleQuestion(){
-  if(partieFinie) return;
-  const liste=generateurs[niveauJeu];
-  let nouveau, essaisGen=0;
-  do{ nouveau=liste[Math.floor(Math.random()*liste.length)](); essaisGen++; }
-  while(exo && nouveau.f===exo.f && essaisGen<10);
-  exo=nouveau; indiceUtilise=false; debutQuestion=Date.now();
-  document.getElementById('exo').innerHTML='Calcule la dérivée de :<div class="result" id="exoTex"></div>';
-  katexVers(document.getElementById('exoTex'),'f(x) = '+tex(exo.f));
-  document.getElementById('feedback').innerHTML='';
+function nouvelExo(){
+  const banque = BANQUE[niveauJeu];
+  let expr;
+  do { expr = banque[Math.floor(Math.random()*banque.length)]; }
+  while(exoCourant && expr===exoCourant.expr && banque.length>1);
+  exoCourant = {expr, solution: math.derivative(expr,'x')};
+  nbIndices = 0; debutQuestion = Date.now();
   nouveauContexte(); affiche();
-  if(modeJeu==='defi') lancerChrono();
+  document.getElementById('feedback').innerHTML = '';
+  document.getElementById('sortie').innerHTML = '';
+  const zone = document.getElementById('exo');
+  zone.innerHTML = '<div class="result" id="enonce"></div>';
+  katexVers(document.getElementById('enonce'), "f(x) = "+tex(expr)+"\\qquad \\text{Calcule } f'(x)");
+  if(modeJeu==='defi') demarrerChrono();
 }
 
 /* ---------- Chrono ---------- */
-function lancerChrono(){
-  arreterChrono(); tempsRestant=TEMPS_DEFI; majChrono();
-  chronoId=setInterval(()=>{
-    tempsRestant-=0.25; majChrono();
+function demarrerChrono(){
+  arreterChrono();
+  tempsTotal = TEMPS_NIVEAU[niveauJeu]; tempsRestant = tempsTotal;
+  majChrono();
+  chronoTimer = setInterval(()=>{
+    tempsRestant--;
+    majChrono();
     if(tempsRestant<=0){ arreterChrono(); tempsEcoule(); }
-  },250);
+  },1000);
 }
-function arreterChrono(){ if(chronoId){clearInterval(chronoId);chronoId=null;} }
+function arreterChrono(){ if(chronoTimer){ clearInterval(chronoTimer); chronoTimer=null; } }
 function majChrono(){
-  const b=document.getElementById('chronoBarre');
-  const pct=Math.max(0,100*tempsRestant/TEMPS_DEFI);
-  b.style.width=pct+'%';
-  b.style.background = pct>50?'#48bb78':pct>20?'#ecc94b':'#e53e3e';
+  const b = document.getElementById('chronoBarre');
+  const pct = Math.max(0,100*tempsRestant/tempsTotal);
+  b.style.width = pct+'%';
+  b.style.background = pct>50 ? '#48bb78' : pct>20 ? '#ecc94b' : '#e53e3e';
 }
 function tempsEcoule(){
-  const fb=document.getElementById('feedback');
-  fb.className='feedback bad';
-  fb.innerHTML="⏰ Temps écoulé ! Réponse : <span id='sol'></span>";
-  katexVers(document.getElementById('sol'),"f'(x) = "+tex(exo.d));
+  enregistrerStat('exo'+niveauJeu, false, 0);
+  essais++; profil.total++; serie = 0;
   perdreVie();
+  const fb = document.getElementById('feedback');
+  fb.className = 'feedback bad';
+  fb.innerHTML = '⏰ Temps écoulé ! Réponse : <span id="repTemps"></span>';
+  katexVers(document.getElementById('repTemps'), "f'(x) = "+tex(exoCourant.solution));
+  sonMauvais(); majHud(); majProfil(); sauver();
+  if(vies>0) setTimeout(nouvelExo,2500);
+}
+function perdreVie(){
+  if(modeJeu!=='defi') return;
+  vies--; majHud();
+  if(vies<=0) finDefi();
+}
+function finDefi(){
+  arreterChrono();
+  profil.defis++;
+  gagnerXP(reussitesSession*5);
+  const zone = document.getElementById('exo');
+  zone.innerHTML = `<div class="encart">🏁 <b>Défi terminé !</b><br>Tu as réussi ${reussitesSession} question(s) sur ${essais}.<br>
+    <button onclick="demarrerPartie()">Rejouer</button></div>`;
+  document.getElementById('feedback').innerHTML = '';
+  sonNiveau();
 }
 
 /* ---------- Vérification ---------- */
 function verifier(){
-  if(partieFinie) return;
-  const fb=document.getElementById('feedback');
-  let rep;
+  if(!exoCourant || vies<=0) return;
+  const saisie = mjsBloc(racine);
+  const fb = document.getElementById('feedback');
+  if(!saisie){ fb.className='feedback bad'; fb.textContent='Entre une réponse avant de vérifier.'; return; }
+  let ok = false;
   try{
-    rep=mjsBloc(racine);
-    if(!rep) return;
-    math.compile(rep);
-  }catch{ fb.className='feedback bad'; fb.textContent='Expression incomplète ou invalide.'; return; }
-
-  let ok=true;
-  try{
-    const a=math.compile(rep), b=math.compile(exo.d);
-    for(const x of [0.5,1.3,2,2.7,3.9]){
-      const va=a.evaluate({x}), vb=b.evaluate({x});
-      if(typeof va!=='number' || Math.abs(va-vb)>1e-6*(1+Math.abs(vb))){ok=false;break;}
+    const sol = exoCourant.solution.compile();
+    const rep = math.parse(saisie).compile();
+    ok = true;
+    const tests = [0.37,0.91,1.43,1.87,2.31,-0.42,-0.83];
+    let valides = 0;
+    for(const x of tests){
+      let a, b;
+      try{ a = sol.evaluate({x}); b = rep.evaluate({x}); }catch{ continue; }
+      if(typeof a!=='number' || typeof b!=='number' || !isFinite(a) || !isFinite(b)) continue;
+      valides++;
+      if(Math.abs(a-b) > 1e-6*(1+Math.abs(a))){ ok = false; break; }
     }
-  }catch{ ok=false; }
-
-  arreterChrono();
+    if(valides<3) ok = false;
+  }catch{
+    fb.className='feedback bad'; fb.textContent='Expression invalide. Vérifie ta saisie.'; return;
+  }
+  const duree = (Date.now()-debutQuestion)/1000;
   essais++; profil.total++;
-  const duree=(Date.now()-debutQuestion)/1000;
-
+  enregistrerStat('exo'+niveauJeu, ok, ok ? serie+1 : 0);
   if(ok){
-    reussites++; serie++; profil.bonnes++;
+    arreterChrono();
+    serie++; reussitesSession++; profil.bonnes++;
     if(serie>profil.meilleureSerie) profil.meilleureSerie=serie;
     if(niveauJeu===3) profil.expert++;
     if(duree<8) profil.rapide++;
-    if(!indiceUtilise) profil.sansIndice++;
-
-    let gain=10*niveauJeu;
-    if(!indiceUtilise) gain+=5;
-    if(duree<8) gain+=5;
-    gain+=Math.min(serie,10)*2;
-    if(modeJeu==='defi') gain+=Math.round(Math.max(0,tempsRestant)/3);
-
-    fb.style.color='';
+    if(nbIndices===0) profil.sansIndice++;
+    const gain = 10*niveauJeu + Math.min(serie,10)*2 + (modeJeu==='defi' ? Math.round(tempsRestant/5) : 0);
     fb.className='feedback good pulse';
-    fb.innerHTML="✅ Bravo ! +"+gain+" XP"+(serie>=3?" · 🔥 série de "+serie:"");
+    fb.textContent = '✅ Bravo ! +'+gain+' XP';
     sonBon();
     gagnerXP(gain);
-    majHUD();
-    questionsDefi++;
-    if(modeJeu==='defi' && questionsDefi>=10){ finDefi(true); return; }
-    setTimeout(()=>{ fb.classList.remove('pulse'); nouvelleQuestion(); },1100);
+    majHud();
+    setTimeout(nouvelExo,1500);
   } else {
-    fb.style.color='';
+    serie = 0;
     fb.className='feedback bad';
-    fb.innerHTML="❌ Ce n'est pas ça. Réponse attendue : <span id='sol'></span>";
-    katexVers(document.getElementById('sol'),"f'(x) = "+tex(exo.d));
+    fb.innerHTML = '❌ Ce n\'est pas ça. Réessaie ou demande un indice.';
     document.getElementById('ecran').classList.add('secoue');
-    setTimeout(()=>document.getElementById('ecran').classList.remove('secoue'),450);
+    setTimeout(()=>document.getElementById('ecran').classList.remove('secoue'),400);
     sonMauvais();
-    serie=0;
-    sauver();
     perdreVie();
+    majHud(); majProfil(); sauver();
   }
 }
 
-/* ---------- Vies et fin de partie ---------- */
-function perdreVie(){
-  serie=0;
-  if(modeJeu==='defi'){
-    vies--;
-    majHUD(); majProfil();
-    if(vies<=0){ finDefi(false); return; }
-    setTimeout(()=>{ if(!partieFinie) nouvelleQuestion(); },2200);
-  } else {
-    majHUD(); majProfil();
-    setTimeout(()=>{ if(!partieFinie) nouvelleQuestion(); },2500);
-  }
-}
-function finDefi(victoire){
-  partieFinie=true;
-  arreterChrono();
-  document.getElementById('btnGo').disabled=true;
-  if(victoire){
-    profil.defis++;
-    gagnerXP(50);
-    confettis();
-  }
-  sauver(); verifierBadges();
-  const fb=document.getElementById('feedback');
-  const html = victoire
-    ? "🏆 Défi réussi ! Bonus +50 XP"
-    : "💀 Plus de vies…";
-  fb.className='feedback '+(victoire?'good':'bad');
-  fb.innerHTML=html+`<div class="encart">Score final : <b>${reussites}</b> réussite(s) sur <b>${essais}</b><br>
-    <button onclick="demarrerPartie()">🔄 Rejouer</button></div>`;
-}
-
-/* ---------- Indice et passer ---------- */
 function indice(){
-  if(modeCourant!=='exo' || partieFinie || !exo) return;
-  const fb=document.getElementById('feedback');
-  if(!indiceUtilise){ indiceUtilise=true; gagnerXP(-5); }
+  if(!exoCourant || vies<=0) return;
+  nbIndices++;
+  gagnerXP(-5);
+  const f = exoCourant.expr;
+  const fb = document.getElementById('feedback');
+  const conseils = [];
+    if(/\)\s*\^|(sin|cos|exp|log|sqrt|tan)\([^x)]/.test(f)) conseils.push("C'est une fonction composée : pense à $(f\\circ g)' = g'\\,f'(g)$.");
+  if(/\*/.test(f.replace(/\d\*x|\d\*\(/g,'')) && !/^\d/.test(f)) conseils.push("C'est un produit : $(uv)' = u'v + uv'$.");
+  if(/\//.test(f)) conseils.push("C'est un quotient : $\\left(\\dfrac{u}{v}\\right)' = \\dfrac{u'v-uv'}{v^2}$.");
+  if(/^x\^\d|^\d\*x\^/.test(f)) conseils.push("Utilise $(x^n)' = n\\,x^{n-1}$.");
+  if(!conseils.length) conseils.push("Dérive terme par terme avec les formules usuelles.");
   fb.className='feedback';
   fb.style.color='#744210';
-  fb.textContent='💡 '+exo.h;
+  fb.innerHTML = '💡 ' + conseils[Math.min(nbIndices-1,conseils.length-1)].replace(/\$([^$]+)\$/g,(m,l)=>katex.renderToString(l,{throwOnError:false}));
+  if(nbIndices>=3){
+    fb.innerHTML += '<br>Début de la solution : <span id="indSol"></span>';
+    const t = tex(exoCourant.solution);
+    katexVers(document.getElementById('indSol'), "f'(x) = "+t.slice(0,Math.ceil(t.length/3))+"\\ldots");
+  }
 }
+
 function passer(){
-  if(modeCourant!=='exo' || partieFinie || !exo) return;
+  if(!exoCourant || vies<=0) return;
   arreterChrono();
+  enregistrerStat('exo'+niveauJeu, false, 0);
   essais++; profil.total++; serie=0;
-  const fb=document.getElementById('feedback');
-  fb.style.color='';
+  const fb = document.getElementById('feedback');
   fb.className='feedback bad';
-  fb.innerHTML="⏭ Question passée. Réponse : <span id='sol'></span>";
-  katexVers(document.getElementById('sol'),"f'(x) = "+tex(exo.d));
-  sauver();
+  fb.innerHTML = 'Réponse : <span id="repPasse"></span>';
+  katexVers(document.getElementById('repPasse'), "f'(x) = "+tex(exoCourant.solution));
   perdreVie();
+  majHud(); majProfil(); sauver();
+  if(vies>0) setTimeout(nouvelExo,2500);
 }
 
 /* =====================================================
-   MODE ASSOCIE LA COURBE
+   MODE ASSOCIE
    ===================================================== */
-const BANQUE_ASSOC = [
-  'x^2','x^3','x^3-3*x','sin(x)','cos(x)','exp(x)/3','x^2/2-x',
-  'x^4/4-x^2','sin(2*x)/2','x*exp(-x/2)','x^3/3-x','cos(x)+x/2'
-];
-let assocBonne=-1, assocBloque=false, assocSerie=0;
+const BANQUES_ASSOC = {
+  1: ['x^2','x^3','sin(x)','cos(x)','exp(x)/3','x^2/2-x','x^3/3-x'],
+  2: ['x^3-3*x','x^4/4-x^2','sin(2*x)/2','x*exp(-x/2)','cos(x)+x/2','x^2*exp(-x/2)','sin(x)+x/2'],
+  3: ['x*sin(x)','exp(-x^2/2)','x^3*exp(-x/2)','sin(x)*cos(x)','x*cos(x)','x^5/5-x^3','exp(x/2)*sin(x)']
+};
+let niveauAssoc = 1;
+let assocBonne = -1, assocBloque = false, assocSerie = 0;
+const COULEURS_ASSOC = ['#e53e3e','#805ad5','#dd6b20'];
 
-function tracerMini(cv, expr, couleur, ymax){
-  const ctx=cv.getContext('2d'), W=cv.width, H=cv.height, xmin=-4, xmax=4;
-  const X=x=>(x-xmin)/(xmax-xmin)*W, Y=y=>H/2-(y/ymax)*(H/2);
-  ctx.clearRect(0,0,W,H);
-  ctx.strokeStyle='#e2e8f0';ctx.lineWidth=1;
-  for(let x=-4;x<=4;x++){ctx.beginPath();ctx.moveTo(X(x),0);ctx.lineTo(X(x),H);ctx.stroke();}
-  ctx.strokeStyle='#4a5568';ctx.lineWidth=2;
-  ctx.beginPath();ctx.moveTo(0,Y(0));ctx.lineTo(W,Y(0));ctx.stroke();
-  ctx.beginPath();ctx.moveTo(X(0),0);ctx.lineTo(X(0),H);ctx.stroke();
-  const fn=math.compile(expr);
-  ctx.strokeStyle=couleur;ctx.lineWidth=3;ctx.beginPath();let deb=true;
-  for(let i=0;i<=300;i++){
-    const x=xmin+(xmax-xmin)*i/300; let y;
-    try{y=fn.evaluate({x});}catch{y=NaN;}
-    if(!isFinite(y)||Math.abs(y)>ymax*3){deb=true;continue;}
-    if(deb){ctx.moveTo(X(x),Y(y));deb=false;}else ctx.lineTo(X(x),Y(y));
+function choisirNiveauAssoc(n){
+  niveauAssoc = n;
+  document.querySelectorAll('#niveauxAssoc button').forEach(b=>b.classList.toggle('actif',+b.dataset.n===n));
+  assocSerie = 0;
+  assocNouveau();
+}
+
+function tracerCourbe(canvas, fn, couleur, ymax, avecAxes, epaisseur){
+  const ctx = canvas.getContext('2d'), W = canvas.width, H = canvas.height;
+  const xmin=-4, xmax=4;
+  const X = x=>(x-xmin)/(xmax-xmin)*W, Y = y=>H/2-(y/ymax)*(H/2);
+  if(avecAxes){
+    ctx.clearRect(0,0,W,H);
+    ctx.strokeStyle='#e2e8f0'; ctx.lineWidth=1;
+    for(let x=Math.ceil(xmin);x<=xmax;x++){ ctx.beginPath(); ctx.moveTo(X(x),0); ctx.lineTo(X(x),H); ctx.stroke(); }
+    ctx.strokeStyle='#4a5568'; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.moveTo(0,Y(0)); ctx.lineTo(W,Y(0)); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(X(0),0); ctx.lineTo(X(0),H); ctx.stroke();
+  }
+  ctx.strokeStyle = couleur; ctx.lineWidth = epaisseur||2.5;
+  ctx.beginPath(); let deb = true;
+  for(let i=0;i<=400;i++){
+    const x = xmin+(xmax-xmin)*i/400; let y;
+    try{ y = fn.evaluate({x}); }catch{ y = NaN; }
+    if(typeof y!=='number' || !isFinite(y) || Math.abs(y)>ymax*2){ deb = true; continue; }
+    if(deb){ ctx.moveTo(X(x),Y(y)); deb = false; } else ctx.lineTo(X(x),Y(y));
   }
   ctx.stroke();
 }
-function echelleAssoc(expr){
-  const fn=math.compile(expr); let m=0;
+
+function amplitude(fn){
+  let m = 0;
   for(let i=0;i<=200;i++){
-    const x=-4+8*i/200;
-    try{const y=Math.abs(fn.evaluate({x}));if(isFinite(y))m=Math.max(m,y);}catch{}
+    const x = -4+8*i/200;
+    try{ const y = fn.evaluate({x}); if(typeof y==='number' && isFinite(y)) m = Math.max(m,Math.abs(y)); }catch{}
   }
-  return Math.min(Math.max(m,1),15);
+  return m<1 ? 1 : Math.min(m*1.15, 30);
 }
-function melanger(a){
-  for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}
-  return a;
-}
+
 function assocNouveau(){
-  assocBloque=false;
-  const msg=document.getElementById('assocMsg');
-  msg.textContent=''; msg.className='feedback';
-  const fExpr=BANQUE_ASSOC[Math.floor(Math.random()*BANQUE_ASSOC.length)];
-  const dExpr=math.derivative(fExpr,'x').toString();
+  assocBloque = false;
+  document.getElementById('assocMsg').textContent = '';
+  document.getElementById('assocMsg').className = 'feedback';
 
-  const autres=melanger(BANQUE_ASSOC.filter(e=>e!==fExpr));
-  let leurre2=math.derivative(autres[0],'x').toString();
-  if(leurre2===dExpr) leurre2=math.derivative(autres[1],'x').toString();
-  const options=melanger([dExpr,fExpr,leurre2]);
-  assocBonne=options.indexOf(dExpr);
+  const banque = BANQUES_ASSOC[niveauAssoc];
+  const fExpr = banque[Math.floor(Math.random()*banque.length)];
+  const dExpr = math.derivative(fExpr,'x').toString();
 
-  katexVers(document.getElementById('assocF'), tex(fExpr));
-  tracerMini(document.getElementById('assocMain'), fExpr, '#3182ce', echelleAssoc(fExpr));
+  const autres = melanger(banque.filter(e=>e!==fExpr));
+  let leurre1 = math.derivative(autres[0],'x').toString();
+  let leurre2 = math.derivative(autres[1],'x').toString();
+  if(leurre1===dExpr) leurre1 = math.derivative(autres[2],'x').toString();
+  if(leurre2===dExpr || leurre2===leurre1) leurre2 = math.derivative(autres[3] || autres[2],'x').toString();
 
-  const zone=document.getElementById('assocChoix'); zone.innerHTML='';
+  const options = melanger([dExpr, leurre1, leurre2]);
+  assocBonne = options.indexOf(dExpr);
+
+  katex.render(tex(fExpr), document.getElementById('assocF'), {throwOnError:false});
+
+  const fFn = math.compile(fExpr);
+  const cMain = document.getElementById('assocMain');
+  tracerCourbe(cMain, fFn, '#3182ce', amplitude(fFn), true, 3);
+
+  const zone = document.getElementById('assocChoix');
+  zone.innerHTML = '';
   options.forEach((expr,i)=>{
-    const b=document.createElement('button');
-    const cv=document.createElement('canvas');
-    cv.width=240; cv.height=160;
-    b.appendChild(cv);
-    const l=document.createElement('div');
-    l.textContent=['A','B','C'][i]; l.style.cssText='font-weight:bold;margin-top:4px';
-    b.appendChild(l);
-    tracerMini(cv, expr, '#e53e3e', echelleAssoc(expr));
-    b.onclick=()=>assocRepondre(i,b,zone);
-    zone.appendChild(b);
+    const btn = document.createElement('button');
+    const cv = document.createElement('canvas');
+    cv.width = 240; cv.height = 160;
+    const fn = math.compile(expr);
+    tracerCourbe(cv, fn, COULEURS_ASSOC[i], amplitude(fn), true, 2.5);
+    btn.appendChild(cv);
+    const lab = document.createElement('div');
+    lab.style.fontWeight = 'bold'; lab.textContent = 'Courbe '+(i+1);
+    btn.appendChild(lab);
+    btn.onclick = ()=>assocRepondre(i);
+    zone.appendChild(btn);
   });
 }
-function assocRepondre(i,btn,zone){
+
+function assocRepondre(i){
   if(assocBloque) return;
-  assocBloque=true;
-  const msg=document.getElementById('assocMsg');
-  const boutons=zone.children;
+  assocBloque = true;
+  const msg = document.getElementById('assocMsg');
+  const boutons = document.querySelectorAll('#assocChoix button');
   profil.total++;
-  if(i===assocBonne){
-    assocSerie++; serie=assocSerie; profil.bonnes++;
-    if(serie>profil.meilleureSerie) profil.meilleureSerie=serie;
-    const gain=15+Math.min(assocSerie,10)*2;
-    btn.style.borderColor='#38a169'; btn.style.background='#f0fff4';
-    msg.className='feedback good pulse';
-    msg.textContent='✅ Bravo ! +'+gain+' XP'+(assocSerie>=3?' · 🔥 série de '+assocSerie:'');
-    sonBon(); gagnerXP(gain);
-    setTimeout(()=>{ if(modeCourant==='assoc') assocNouveau(); },1400);
+  const ok = (i===assocBonne);
+  enregistrerStat('assoc'+niveauAssoc, ok, ok ? assocSerie+1 : 0);
+  boutons[assocBonne].style.borderColor = '#38a169';
+  boutons[assocBonne].style.background = '#f0fff4';
+  if(ok){
+    assocSerie++;
+    profil.bonnes++;
+    if(assocSerie>profil.meilleureSerie) profil.meilleureSerie = assocSerie;
+    const gain = 10*niveauAssoc + 5 + Math.min(assocSerie,10)*2;
+    msg.className = 'feedback good pulse';
+    msg.textContent = '✅ Bien vu ! +'+gain+' XP';
+    sonBon();
+    gagnerXP(gain);
   } else {
-    assocSerie=0; serie=0;
-    btn.style.borderColor='#e53e3e'; btn.style.background='#fff5f5';
-    boutons[assocBonne].style.borderColor='#38a169';
-    boutons[assocBonne].style.background='#f0fff4';
-    msg.className='feedback bad';
-    msg.textContent='❌ Raté, la bonne réponse est '+['A','B','C'][assocBonne]+
-      '. Indice : là où f a un sommet, f′ vaut 0 ; là où f monte, f′ est positive.';
-    sonMauvais(); sauver(); majProfil();
+    assocSerie = 0;
+    boutons[i].style.borderColor = '#e53e3e';
+    boutons[i].style.background = '#fff5f5';
+    msg.className = 'feedback bad';
+    msg.textContent = '❌ Raté. Regarde où f est croissante, décroissante, et où elle admet un extremum : la dérivée y est positive, négative ou nulle.';
+    sonMauvais();
+    profil.total += 0;
+    sauver();
   }
+  setTimeout(()=>{ if(modeCourant==='assoc') assocNouveau(); }, ok ? 1500 : 3500);
 }
 
 /* =====================================================
-   FORMULES (bloc repliable)
+   FORMULES À RETENIR
    ===================================================== */
-const F=[
- "(k)' = 0 \\quad ; \\quad (x)' = 1 \\quad ; \\quad (x^n)' = n\\,x^{n-1}",
- "(u+v)' = u'+v' \\quad ; \\quad (k\\,u)' = k\\,u'",
- "(uv)' = u'v + uv'",
- "\\left(\\dfrac{u}{v}\\right)' = \\dfrac{u'v - uv'}{v^2}",
- "(\\sin x)' = \\cos x \\quad ; \\quad (\\cos x)' = -\\sin x",
- "(e^x)' = e^x \\quad ; \\quad (\\ln x)' = \\dfrac{1}{x} \\quad ; \\quad (\\sqrt{x})' = \\dfrac{1}{2\\sqrt{x}}",
- "(f\\circ g)' = g' \\times f'(g)",
- "(e^{u})' = u'e^{u} \\quad ; \\quad (\\ln u)' = \\dfrac{u'}{u} \\quad ; \\quad (u^n)' = n\\,u'\\,u^{n-1}"
+const FORMULES = [
+  "(k)' = 0 \\qquad (x)' = 1 \\qquad (x^n)' = n\\,x^{n-1}",
+  "(\\sqrt{x})' = \\dfrac{1}{2\\sqrt{x}} \\qquad \\left(\\dfrac{1}{x}\\right)' = -\\dfrac{1}{x^2}",
+  "(e^{x})' = e^{x} \\qquad (\\ln x)' = \\dfrac{1}{x}",
+  "(\\sin x)' = \\cos x \\qquad (\\cos x)' = -\\sin x \\qquad (\\tan x)' = 1+\\tan^2 x = \\dfrac{1}{\\cos^2 x}",
+  "(u+v)' = u'+v' \\qquad (k\\,u)' = k\\,u'",
+  "(uv)' = u'v+uv'",
+  "\\left(\\dfrac{u}{v}\\right)' = \\dfrac{u'v-uv'}{v^2}",
+  "(u^n)' = n\\,u'\\,u^{n-1} \\qquad (e^{u})' = u'\\,e^{u} \\qquad (\\ln u)' = \\dfrac{u'}{u}",
+  "(\\sin(ax+b))' = a\\cos(ax+b) \\qquad (\\cos(ax+b))' = -a\\sin(ax+b)",
+  "(f\\circ g)'(x) = g'(x)\\,f'(g(x))"
 ];
-document.getElementById('formules').innerHTML=F.map(()=>'<li></li>').join('');
-document.querySelectorAll('#formules li').forEach((li,i)=>katexVers(li,F[i]));
-
-/* =====================================================
-   CLAVIER PHYSIQUE
-   ===================================================== */
-document.addEventListener('keydown',e=>{
-  const t=e.target.tagName;
-  if(t==='INPUT'||t==='SELECT'||t==='SUMMARY'||t==='TEXTAREA') return;
-  if(modeCourant==='assoc') return;
-  if(/^[0-9x+()]$/.test(e.key)) ins(e.key);
-  else if(e.key==='-') ins('−');
-  else if(e.key==='*') ins('×');
-  else if(e.key==='/') { e.preventDefault(); ins('frac'); }
-  else if(e.key==='^') ins('pow');
-  else if(e.key===',' || e.key==='.') ins(',');
-  else if(e.key==='Backspace') eff();
-  else if(e.key==='ArrowRight') { e.preventDefault(); droite(); }
-  else if(e.key==='ArrowLeft') { e.preventDefault(); gauche(); }
-  else if(e.key==='Enter') valider();
-});
+function afficherFormules(){
+  const ul = document.getElementById('formules');
+  ul.innerHTML = FORMULES.map(()=>'<li></li>').join('');
+  ul.querySelectorAll('li').forEach((li,i)=>katexVers(li, FORMULES[i]));
+}
 
 /* =====================================================
    DÉMARRAGE
@@ -1034,6 +1122,8 @@ document.addEventListener('keydown',e=>{
 charger();
 majBadges();
 majProfil();
+majStats();
+afficherFormules();
 mode('calc');
 </script>
 </body>
